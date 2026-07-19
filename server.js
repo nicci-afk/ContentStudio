@@ -24,6 +24,7 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia } =
   await import('./lib/engine.js');
+const { startRender, renderJob, renderFile, listRenders } = await import('./lib/render.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
 const app = express();
@@ -189,10 +190,11 @@ app.post('/api/voice-dna/remove', wrap(async (req, res) => {
 app.get('/api/media', (req, res) => res.json({ items: mediaStore.get().items }));
 
 app.post('/api/media', wrap(async (req, res) => {
-  const { name, mime, kind, size, w, h, takenAt, gps, thumbB64, analysisB64 } = req.body;
+  const { name, mime, kind, size, w, h, takenAt, gps, thumbB64, analysisB64, renderB64 } = req.body;
   const id = uid();
   if (thumbB64) saveMediaFile(id, 'thumb', Buffer.from(thumbB64, 'base64'));
   if (analysisB64) saveMediaFile(id, 'analysis', Buffer.from(analysisB64, 'base64'));
+  if (renderB64) saveMediaFile(id, 'render', Buffer.from(renderB64, 'base64'));
   const record = {
     id, name, mime, kind: kind || (String(mime).startsWith('video') ? 'video' : 'image'),
     size: size || 0, w: w || null, h: h || null,
@@ -340,6 +342,46 @@ app.post('/api/packages/:id/rescore', (req, res) => {
 app.delete('/api/packages/:id', (req, res) => {
   packageStore.update((s) => ({ items: s.items.filter((p) => p.id !== req.params.id) }));
   res.json({ ok: true });
+});
+
+// ---- auto-produce (finished video rendering) -----------------------------
+
+app.post('/api/render', wrap(async (req, res) => {
+  const { packageId, platformId, voiceId, orientation, avatar } = req.body;
+  const pkg = packageStore.get().items.find((p) => p.id === packageId);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const fields = pkg.platforms?.[platformId]?.fields;
+  if (!fields) return res.status(400).json({ error: 'that platform is not in this package' });
+  const script = fields.script || fields.body || fields.post || '';
+  const hookText = fields.hook || fields.hook_script || '';
+  const renderId = startRender({
+    pkg, platformId, script, hookText, voiceId: voiceId || null,
+    orientation: orientation || (platformId === 'youtube_long' ? 'landscape' : 'portrait'),
+    avatar: avatar || null,
+  });
+  res.json({ renderId });
+}));
+
+app.get('/api/render/:id', (req, res) => {
+  const job = renderJob(req.params.id);
+  if (!job) return res.status(404).json({ error: 'unknown render' });
+  res.json(job);
+});
+
+app.get('/api/render/:id/video', (req, res) => {
+  const file = renderFile(req.params.id, 'mp4');
+  if (!file) return res.status(404).end();
+  res.sendFile(file);
+});
+
+app.get('/api/render/:id/srt', (req, res) => {
+  const file = renderFile(req.params.id, 'srt');
+  if (!file) return res.status(404).end();
+  res.type('text/plain').sendFile(file);
+});
+
+app.get('/api/packages/:id/renders', (req, res) => {
+  res.json({ items: listRenders(req.params.id) });
 });
 
 // ---- voice (ElevenLabs) --------------------------------------------------

@@ -213,6 +213,7 @@ function renderPackage(pkg, onDelete) {
           onclick: () => { sessionStorage.setItem('cs-script', script); location.hash = '#/avatar-studio'; },
         }, '🧑‍💻 Film with Avatar')));
     }
+    if (spec?.group === 'video') body.append(producePanel(pkg, active));
   };
 
   drawTabs();
@@ -231,6 +232,106 @@ function renderPackage(pkg, onDelete) {
         el('button', { class: 'btn btn-danger btn-xs', onclick: onDelete }, 'Delete'))),
     pkg.quotable ? el('blockquote', { class: 'sample' }, `“${pkg.quotable}”`) : null,
     tabRow, body);
+}
+
+function producePanel(pkg, platformId) {
+  const panel = el('div', { class: 'produce-panel' });
+  const defaultOrientation = platformId === 'youtube_long' ? 'landscape' : 'portrait';
+  const state = { voiceId: null, useAvatar: false, avatarId: null, heygenVoiceId: null, orientation: defaultOrientation };
+
+  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
+    el('option', { value: '' }, 'No narration key — silent preview'));
+  const avatarWrap = el('div', { class: 'row gap wrap', style: 'display:none' });
+  const orientationSelect = el('select', { class: 'input select', onchange: (e) => { state.orientation = e.target.value; } },
+    el('option', { value: 'portrait', selected: defaultOrientation === 'portrait' }, 'Portrait 9:16'),
+    el('option', { value: 'landscape', selected: defaultOrientation === 'landscape' }, 'Landscape 16:9'));
+  const result = el('div', {});
+  const renderList = el('div', {});
+
+  api.voices().then(({ voices }) => {
+    voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name}${v.category === 'cloned' ? ' · your clone' : ''}`)));
+    state.voiceId = voices.find((v) => v.category === 'cloned')?.id || voices[0]?.id || null;
+    if (state.voiceId) voiceSelect.value = state.voiceId;
+  }).catch(() => {});
+
+  const avatarToggle = el('button', {
+    class: 'chip chip-toggle',
+    onclick: async (e) => {
+      state.useAvatar = !state.useAvatar;
+      e.target.classList.toggle('on');
+      avatarWrap.style.display = state.useAvatar ? 'flex' : 'none';
+      if (state.useAvatar && !avatarWrap.children.length) {
+        try {
+          const [{ avatars }, { voices }] = await Promise.all([api.avatars(), api.avatarVoices()]);
+          const aSel = el('select', { class: 'input select', onchange: (ev) => { state.avatarId = ev.target.value; } },
+            ...avatars.map((a) => el('option', { value: a.id }, a.name)));
+          const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; } },
+            ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
+          state.avatarId = avatars[0]?.id || null;
+          state.heygenVoiceId = voices[0]?.id || null;
+          avatarWrap.append(aSel, vSel);
+        } catch (err) {
+          toast(`Avatar unavailable: ${err.message}`, 'err');
+          state.useAvatar = false;
+          e.target.classList.remove('on');
+          avatarWrap.style.display = 'none';
+        }
+      }
+    },
+  }, '🧑‍💻 Open with my avatar (HeyGen)');
+
+  const drawRenders = async () => {
+    try {
+      const { items } = await api.packageRenders(pkg.id);
+      const mine = items.filter((r) => r.platformId === platformId);
+      renderList.replaceChildren(...mine.map((r) => el('div', { class: 'render-row' },
+        el('video', { controls: true, preload: 'metadata', class: 'video-player', src: `/api/render/${r.id}/video` }),
+        el('div', { class: 'row gap' },
+          el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${r.platformId}-${r.id}.mp4` }, '⬇ MP4'),
+          el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${r.id}.srt` }, '⬇ Captions (.srt)'),
+          el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}`)))));
+    } catch { /* list is best-effort */ }
+  };
+
+  const produce = async () => {
+    result.replaceChildren(spinner('Queueing render…'));
+    try {
+      const { renderId } = await api.render({
+        packageId: pkg.id, platformId,
+        voiceId: state.voiceId,
+        orientation: state.orientation,
+        avatar: state.useAvatar ? { avatarId: state.avatarId, voiceId: state.heygenVoiceId } : null,
+      });
+      while (true) {
+        await new Promise((r) => setTimeout(r, 4000));
+        const job = await api.renderStatus(renderId);
+        if (job.status === 'done') {
+          result.replaceChildren();
+          toast('Video rendered');
+          await drawRenders();
+          return;
+        }
+        if (job.status === 'error') throw new Error(job.error || 'render failed');
+        result.replaceChildren(spinner(`Producing… ${job.step}`));
+      }
+    } catch (err) {
+      result.replaceChildren();
+      toast(err.message, 'err');
+    }
+  };
+
+  panel.append(
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' }, '🎬 Auto-produce this video'),
+      el('span', { class: 'muted' }, 'Your library imagery + your cloned voice, rendered to a finished MP4')),
+    el('div', { class: 'row gap wrap' },
+      voiceSelect, orientationSelect, avatarToggle),
+    avatarWrap,
+    el('button', { class: 'btn btn-primary', onclick: produce }, '🎬 Produce video'),
+    result, renderList,
+  );
+  drawRenders();
+  return panel;
 }
 
 function visibilityTab(pkg) {

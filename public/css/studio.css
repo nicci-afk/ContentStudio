@@ -259,6 +259,14 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast-err { border-color: rgba(255, 107, 122, 0.5); color: var(--danger); }
 
+.produce-panel {
+  border: 1px solid rgba(124, 108, 255, 0.35); border-radius: 12px;
+  padding: 16px; margin-top: 18px; display: flex; flex-direction: column; gap: 12px;
+  background: rgba(124, 108, 255, 0.05);
+}
+.render-row { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.produce-panel .video-player { max-height: 420px; }
+
 .audio-player, .video-player { width: 100%; margin-top: 12px; border-radius: 10px; }
 .video-player { max-height: 480px; background: #000; }
 

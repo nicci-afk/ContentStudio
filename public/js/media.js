@@ -198,6 +198,7 @@ function frames(source, w, h) {
     w, h,
     thumbB64: canvasB64(drawScaled(source, w, h, 360), 0.72),
     analysisB64: canvasB64(drawScaled(source, w, h, 800), 0.74),
+    renderB64: canvasB64(drawScaled(source, w, h, 1920), 0.82),
   };
 }
 
@@ -275,7 +276,7 @@ async function importFiles(files, onStatus, existing = []) {
       w: f.w, h: f.h,
       takenAt: exif.takenAt || (file.lastModified ? new Date(file.lastModified).toISOString() : null),
       gps: exif.gps || gps || null,
-      thumbB64: f.thumbB64, analysisB64: f.analysisB64,
+      thumbB64: f.thumbB64, analysisB64: f.analysisB64, renderB64: f.renderB64 || null,
     });
     done += 1;
     tick();

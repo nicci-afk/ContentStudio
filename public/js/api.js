@@ -50,6 +50,10 @@ export const api = {
         return res.blob();
       }),
 
+  render: (body) => send('POST', '/api/render', body),
+  renderStatus: (id) => get(`/api/render/${id}`),
+  packageRenders: (pkgId) => get(`/api/packages/${pkgId}/renders`),
+
   avatars: () => get('/api/avatar/avatars'),
   avatarVoices: () => get('/api/avatar/voices'),
   avatarGenerate: (body) => send('POST', '/api/avatar/generate', body),

@@ -15,7 +15,8 @@ if (fs.existsSync(envFile)) {
 }
 
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles,
-  listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace } =
+  listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace,
+  listSnapshots, restoreSnapshot } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -116,6 +117,14 @@ app.patch('/api/state', (req, res) => {
   node[keys.at(-1)] = value;
   stateStore.set(state);
   res.json({ ok: true });
+});
+
+app.get('/api/state/snapshots', (req, res) => res.json({ items: listSnapshots() }));
+
+app.post('/api/state/restore', (req, res) => {
+  const restored = restoreSnapshot(req.body?.name);
+  if (!restored) return res.status(404).json({ error: 'unknown snapshot' });
+  res.json({ ok: true, state: restored });
 });
 
 app.post('/api/demo', (req, res) => {

@@ -40,24 +40,41 @@ export function renderStrategy(root) {
         el('div', {},
           el('h1', {}, 'Pillars & Series'),
           el('p', { class: 'sub' }, 'The architecture: 4-5 pillars weighted for AI visibility, expressed as recurring story series people (and algorithms) learn to expect.')),
-        el('button', {
-          class: 'btn btn-primary', onclick: async (e) => {
-            const btn = e.target;
-            btn.replaceWith(spinner('Designing your architecture…'));
-            try {
-              const result = await api.suggestPillars();
-              profile.pillars = (result.pillars || []).map((p) => ({ id: uid(), ...p }));
-              profile.series = (result.series || []).map((s) => ({
-                id: uid(), name: s.name, format: s.format, cadence: s.cadence,
-                episodeIdeas: s.episodeIdeas || [],
-                pillarId: profile.pillars.find((p) => p.name === s.pillar)?.id || profile.pillars[0]?.id || null,
-              }));
+        el('div', { class: 'row gap' },
+          profile.strategyBackup ? el('button', {
+            class: 'btn btn-ghost', onclick: async () => {
+              const current = { pillars: profile.pillars, series: profile.series, savedAt: new Date().toISOString() };
+              profile.pillars = profile.strategyBackup.pillars || [];
+              profile.series = profile.strategyBackup.series || [];
+              profile.strategyBackup = current;
               await save();
-              toast('Architecture designed');
-            } catch (err) { toast(err.message, 'err'); }
-            render();
-          },
-        }, '✦ Design my architecture')),
+              toast('Restored — press again to switch back');
+              render();
+            },
+          }, '↩ Undo architecture change') : null,
+          el('button', {
+            class: 'btn btn-primary', onclick: async (e) => {
+              const hasWork = (profile.pillars?.length || 0) + (profile.series?.length || 0) > 0;
+              if (hasWork && !confirm('This replaces your current pillars and series with an AI-designed set.\n\nYour current setup will be saved behind the Undo button. Continue?')) return;
+              const btn = e.target;
+              btn.replaceWith(spinner('Designing your architecture…'));
+              try {
+                const result = await api.suggestPillars();
+                if (hasWork) {
+                  profile.strategyBackup = { pillars: profile.pillars, series: profile.series, savedAt: new Date().toISOString() };
+                }
+                profile.pillars = (result.pillars || []).map((p) => ({ id: uid(), ...p }));
+                profile.series = (result.series || []).map((s) => ({
+                  id: uid(), name: s.name, format: s.format, cadence: s.cadence,
+                  episodeIdeas: s.episodeIdeas || [],
+                  pillarId: profile.pillars.find((p) => p.name === s.pillar)?.id || profile.pillars[0]?.id || null,
+                }));
+                await save();
+                toast('Architecture designed — Undo is available if you prefer your old setup');
+              } catch (err) { toast(err.message, 'err'); }
+              render();
+            },
+          }, '✦ Design my architecture'))),
     );
 
     const pillarRow = (p) => el('div', { class: 'pillar-row' },

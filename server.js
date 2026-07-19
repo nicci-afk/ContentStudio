@@ -28,12 +28,16 @@ const app = express();
 
 // When STUDIO_PASSWORD is set (any public deployment), the whole studio —
 // UI and API — sits behind HTTP Basic auth. Any username, one password.
+// /api/health stays open (hosting platforms probe it without credentials)
+// and /llms.txt stays open (it exists to be read by AI crawlers).
+const PUBLIC_PATHS = new Set(['/api/health', '/llms.txt']);
 const password = process.env.STUDIO_PASSWORD;
 if (password) {
   const crypto = await import('node:crypto');
   const hash = (s) => crypto.createHash('sha256').update(String(s)).digest();
   const expected = hash(password);
   app.use((req, res, next) => {
+    if (PUBLIC_PATHS.has(req.path)) return next();
     const header = req.headers.authorization || '';
     if (header.startsWith('Basic ')) {
       const token = Buffer.from(header.slice(6), 'base64').toString();

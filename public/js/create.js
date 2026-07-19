@@ -6,7 +6,7 @@ const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : Str
 export function renderCreate(root, openPackageId = null) {
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
-  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.map((p) => p.id)), mediaIds: new Set() };
+  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.map((p) => p.id)), mediaIds: new Set(), autoMedia: true };
   let media = [];
 
   const formCard = el('div', { class: 'card form-card' });
@@ -52,15 +52,27 @@ export function renderCreate(root, openPackageId = null) {
           return chip;
         }))),
       el('div', { class: 'field' },
-        el('span', { class: 'field-label' }, `Attach media (${media.length} in library)`),
+        el('span', { class: 'field-label' }, `Media (${media.length} in library)`),
         media.length
-          ? el('div', { class: 'mini-media-row' }, media.slice(0, 40).map((m) => {
-              const img = el('img', {
-                class: 'mini-thumb', src: `/api/media/${m.id}/thumb`, alt: m.alt || m.name, title: m.caption || m.name,
-                onclick: () => { form.mediaIds.has(m.id) ? form.mediaIds.delete(m.id) : form.mediaIds.add(m.id); img.classList.toggle('on'); },
-              });
-              return img;
-            }))
+          ? el('div', {},
+              el('button', {
+                class: `chip chip-toggle ${form.autoMedia ? 'on' : ''}`,
+                onclick: (e) => {
+                  form.autoMedia = !form.autoMedia;
+                  e.target.classList.toggle('on');
+                  drawForm();
+                },
+              }, '✦ Let AI pick from my library (recommended)'),
+              form.autoMedia
+                ? el('p', { class: 'muted', style: 'margin:8px 0 0' },
+                    'The engine scans your analyzed library and selects the assets with the strongest visibility metadata and story fit for this topic — you\'ll see each pick and why in the finished package.')
+                : el('div', { class: 'mini-media-row', style: 'margin-top:8px' }, media.slice(0, 60).map((m) => {
+                    const img = el('img', {
+                      class: `mini-thumb ${form.mediaIds.has(m.id) ? 'on' : ''}`, src: `/api/media/${m.id}/thumb`, alt: m.alt || m.name, title: m.caption || m.name,
+                      onclick: () => { form.mediaIds.has(m.id) ? form.mediaIds.delete(m.id) : form.mediaIds.add(m.id); img.classList.toggle('on'); },
+                    });
+                    return img;
+                  })))
           : el('span', { class: 'muted' }, 'Import photos/videos in the Library and they appear here for b-roll and carousel matching.')),
       el('button', {
         class: 'btn btn-primary btn-lg', onclick: async () => {
@@ -81,7 +93,9 @@ export function renderCreate(root, openPackageId = null) {
         topic: form.topic.trim(), angle: form.angle.trim() || null,
         ctaUrl: form.ctaUrl.trim() || null,
         pillarId: form.pillarId, seriesId: form.seriesId,
-        platforms: [...form.platforms], mediaIds: [...form.mediaIds],
+        platforms: [...form.platforms],
+        mediaIds: form.autoMedia ? [] : [...form.mediaIds],
+        autoMedia: form.autoMedia,
       });
       while (true) {
         await new Promise((r) => setTimeout(r, 1800));
@@ -249,6 +263,11 @@ function metadataTab(pkg) {
     (pkg.queryMap || []).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Query map (phrasings this package should win)'), copyBtn(pkg.queryMap.join('\n'))),
       el('div', { class: 'chip-row' }, pkg.queryMap.map((q) => el('span', { class: 'chip' }, q)))) : null,
+    (pkg.mediaIds || []).length ? el('div', { class: 'asset-field' },
+      el('span', { class: 'field-label' }, `Media in this package${pkg.mediaSelectionMode === 'ai' ? ' (AI-selected)' : ''}`),
+      el('div', { class: 'mini-media-row' }, pkg.mediaIds.map((id) => el('div', { class: 'pick-cell' },
+        el('img', { class: 'mini-thumb on', src: `/api/media/${id}/thumb`, alt: pkg.altTexts?.[id] || 'selected media' }),
+        pkg.mediaSelection?.[id] ? el('span', { class: 'muted pick-reason' }, pkg.mediaSelection[id]) : null)))) : null,
     Object.keys(pkg.links || {}).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Tracked CTA links (one per platform)'), copyBtn(Object.entries(pkg.links).map(([k, v]) => `${k}: ${v}`).join('\n'))),
       el('ul', { class: 'plain-list' }, Object.entries(pkg.links).map(([k, v]) => el('li', {}, `${k} → ${v}`)))) : null,

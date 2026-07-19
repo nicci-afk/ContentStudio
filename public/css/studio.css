@@ -162,6 +162,9 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 .mini-media-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .mini-thumb { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; opacity: 0.65; }
 .mini-thumb.on { border-color: var(--accent); opacity: 1; }
+.pick-cell { display: flex; flex-direction: column; gap: 4px; width: 110px; }
+.pick-cell .mini-thumb { width: 110px; height: 74px; }
+.pick-reason { font-size: 10.5px; line-height: 1.35; }
 
 /* ---- pillars / series ---- */
 .pillar-row { padding: 12px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; position: relative; }

@@ -22,7 +22,7 @@ const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
 const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, ProviderError } =
   await import('./lib/providers.js');
-const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia } =
+const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia } =
   await import('./lib/engine.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
@@ -259,32 +259,42 @@ app.post('/api/pillars/suggest', wrap(async (req, res) => {
 const jobs = new Map();
 
 app.post('/api/generate', wrap(async (req, res) => {
-  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl } = req.body;
+  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   const state = stateStore.get();
   const profile = state.profile;
   const pillar = (profile.pillars || []).find((p) => p.id === pillarId) || null;
   const series = (profile.series || []).find((s) => s.id === seriesId) || null;
-  const media = mediaStore.get().items.filter((m) => (mediaIds || []).includes(m.id));
 
   const jobId = uid();
-  const job = { id: jobId, status: 'running', progress: { done: 0, total: (platforms?.length || 12) + 1 }, package: null, error: null };
+  const job = { id: jobId, status: 'running', progress: { done: 0, total: (platforms?.length || 14) + 1 }, package: null, error: null };
   jobs.set(jobId, job);
 
-  generatePackage({
-    profile, topic, angle, pillar, series, media, ctaUrl,
-    platformIds: platforms,
-    onProgress: (p) => { job.progress = p; },
-  })
-    .then((pkg) => {
-      packageStore.update((s) => ({ items: [pkg, ...s.items] }));
-      job.package = pkg;
-      job.status = 'done';
-    })
-    .catch((err) => {
-      job.status = 'error';
-      job.error = err.message;
+  (async () => {
+    let media = mediaStore.get().items.filter((m) => (mediaIds || []).includes(m.id));
+    let mediaSelection = null;
+    if (!media.length && autoMedia) {
+      job.progress = { platform: 'selecting media from your library', done: 0, total: job.progress.total };
+      const sel = await selectMedia({ profile, topic, angle, pillar, items: mediaStore.get().items });
+      media = mediaStore.get().items.filter((m) => sel.ids.includes(m.id));
+      mediaSelection = sel;
+    }
+    const pkg = await generatePackage({
+      profile, topic, angle, pillar, series, media, ctaUrl,
+      platformIds: platforms,
+      onProgress: (p) => { job.progress = p; },
     });
+    if (mediaSelection) {
+      pkg.mediaSelection = mediaSelection.reasons;
+      pkg.mediaSelectionMode = mediaSelection.mode;
+    }
+    packageStore.update((s) => ({ items: [pkg, ...s.items] }));
+    job.package = pkg;
+    job.status = 'done';
+  })().catch((err) => {
+    job.status = 'error';
+    job.error = err.message;
+  });
 
   res.json({ jobId });
 }));

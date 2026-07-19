@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · ContentStudio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(900px 500px at 70% -10%, #1a1440 0%, #0b0e14 55%); color: #e8ecf6;
+      padding: 20px;
+    }
+    .card {
+      width: 100%; max-width: 400px; background: linear-gradient(180deg, #141926, #10141d);
+      border: 1px solid #232c42; border-radius: 16px; padding: 30px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .mark { font-size: 24px; background: linear-gradient(135deg, #7c6cff, #4ecdc4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    h1 { font-size: 18px; margin: 0; }
+    .sub { color: #8b96b0; font-size: 13px; margin: 0 0 22px; }
+    label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8b96b0; font-weight: 600; margin: 0 0 6px; }
+    input {
+      width: 100%; background: #10141d; border: 1px solid #232c42; border-radius: 10px;
+      color: #e8ecf6; padding: 12px 14px; font-size: 15px; margin-bottom: 12px;
+    }
+    input:focus { outline: none; border-color: #7c6cff; }
+    button {
+      width: 100%; border: none; border-radius: 10px; padding: 13px; font-size: 14.5px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+    }
+    .primary { background: linear-gradient(135deg, #7c6cff, #5a4bd4); color: #fff; }
+    .ghost { background: transparent; border: 1px solid #232c42; color: #e8ecf6; margin-top: 10px; }
+    .divider { display: flex; align-items: center; gap: 10px; color: #8b96b0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #232c42; }
+    .status { font-size: 13.5px; margin-top: 14px; line-height: 1.5; min-height: 20px; }
+    .ok { color: #4ecdc4; } .err { color: #ff6b7a; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand"><span class="mark">◆</span><h1>ContentStudio</h1></div>
+    <p class="sub">AI Visibility Engine · sign in to your studio</p>
+
+    <div id="magic-block">
+      <label for="email">Email — we'll send you a magic link</label>
+      <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
+      <button class="primary" id="magic-btn">✉ Email me a sign-in link</button>
+    </div>
+
+    <div class="divider" id="divider">or</div>
+
+    <div id="password-block">
+      <label for="password">Studio password</label>
+      <input id="password" type="password" placeholder="••••••••••" autocomplete="current-password" />
+      <button class="ghost" id="password-btn">Sign in with password</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    const status = document.getElementById('status');
+    const say = (msg, cls) => { status.textContent = msg; status.className = 'status ' + (cls || ''); };
+
+    fetch('/auth/config').then((r) => r.json()).then((cfg) => {
+      if (!cfg.magic) { document.getElementById('magic-block').classList.add('hidden'); document.getElementById('divider').classList.add('hidden'); }
+      if (!cfg.password) { document.getElementById('password-block').classList.add('hidden'); document.getElementById('divider').classList.add('hidden'); }
+    }).catch(() => {});
+
+    document.getElementById('magic-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      if (!email) return say('Enter your email first.', 'err');
+      say('Sending…');
+      try {
+        const res = await fetch('/auth/magic/request', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (!res.ok) return say(data.error || 'Could not send the link.', 'err');
+        if (data.testLink) { location.href = data.testLink; return; }
+        say('Check your inbox — your sign-in link is on its way (valid 15 minutes).', 'ok');
+      } catch { say('Could not reach the server.', 'err'); }
+    });
+
+    document.getElementById('password-btn').addEventListener('click', async () => {
+      const password = document.getElementById('password').value;
+      if (!password) return say('Enter the studio password.', 'err');
+      say('Checking…');
+      try {
+        const res = await fetch('/auth/password', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }),
+        });
+        if (res.ok) { location.href = '/'; return; }
+        const data = await res.json().catch(() => ({}));
+        say(data.error || 'Wrong password.', 'err');
+      } catch { say('Could not reach the server.', 'err'); }
+    });
+
+    document.getElementById('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('password-btn').click(); });
+    document.getElementById('email').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('magic-btn').click(); });
+  </script>
+</body>
+</html>

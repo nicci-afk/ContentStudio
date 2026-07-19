@@ -27,32 +27,16 @@ const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, an
 const { startRender, renderJob, renderFile, listRenders } = await import('./lib/render.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
+const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
+
 const app = express();
 
-// When STUDIO_PASSWORD is set (any public deployment), the whole studio —
-// UI and API — sits behind HTTP Basic auth. Any username, one password.
-// /api/health stays open (hosting platforms probe it without credentials)
-// and /llms.txt stays open (it exists to be read by AI crawlers).
-const PUBLIC_PATHS = new Set(['/api/health', '/llms.txt']);
-const password = process.env.STUDIO_PASSWORD;
-if (password) {
-  const crypto = await import('node:crypto');
-  const hash = (s) => crypto.createHash('sha256').update(String(s)).digest();
-  const expected = hash(password);
-  app.use((req, res, next) => {
-    if (PUBLIC_PATHS.has(req.path)) return next();
-    const header = req.headers.authorization || '';
-    if (header.startsWith('Basic ')) {
-      const token = Buffer.from(header.slice(6), 'base64').toString();
-      const supplied = token.slice(token.indexOf(':') + 1);
-      if (crypto.timingSafeEqual(hash(supplied), expected)) return next();
-    }
-    res.set('WWW-Authenticate', 'Basic realm="ContentStudio"');
-    res.status(401).send('ContentStudio: password required');
-  });
-}
-
+// Auth: magic-link email sign-in (MAGIC_EMAILS allowlist) and/or the studio
+// password — both produce a 30-day session cookie. Basic auth still works
+// for API tools. /api/health and /llms.txt stay public by design.
 app.use(express.json({ limit: '80mb' }));
+registerAuthRoutes(app, path.join(__dirname, 'public'));
+app.use(authMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
 const wrap = (fn) => (req, res) => {

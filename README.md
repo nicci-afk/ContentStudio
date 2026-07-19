@@ -105,6 +105,12 @@ curl -X POST http://localhost:4600/api/generate \
 
 ## Deploying
 
+## Signing in
+
+Two ways in, both yielding a 30-day session: **magic link** (enter an email from the `MAGIC_EMAILS` allowlist; a one-time link valid 15 minutes arrives by mail) and the **studio password** (`STUDIO_PASSWORD`). Magic links need an email sender: set `RESEND_API_KEY` (resend.com), or SMTP — for Gmail, create an App Password at myaccount.google.com/apppasswords and set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`. Basic auth with the password still works for API/curl calls.
+
+## Deploying
+
 **Render (recommended):** this repo ships a `render.yaml` blueprint. In Render choose **New → Blueprint**, connect the repo, pick the branch, and Render provisions the service with a persistent 1 GB disk for your data. It prompts for `STUDIO_PASSWORD` (required — gates the whole studio behind a password) and your provider keys (optional, add later in the Environment tab anytime).
 
 Any other Node 18+ host also works. `Dockerfile` included:

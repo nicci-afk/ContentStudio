@@ -16,6 +16,14 @@ services:
         value: /var/data
       - key: STUDIO_PASSWORD
         sync: false
+      - key: MAGIC_EMAILS
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ELEVENLABS_API_KEY

@@ -200,6 +200,7 @@ function renderPackage(pkg, onDelete) {
       el('div', { class: 'row gap' },
         pkg.visibility ? scoreBadge(pkg.visibility.score, pkg.visibility.grade) : null,
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.md`, packageMarkdown(pkg), 'text/markdown') }, '⬇ Publish kit (.md)'),
+        el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`website-kit-${pkg.id}.md`, websiteKit(pkg), 'text/markdown') }, '⬇ Website kit (Lovable)'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.json`, JSON.stringify(pkg, null, 2), 'application/json') }, '⬇ JSON'),
         el('button', { class: 'btn btn-danger btn-xs', onclick: onDelete }, 'Delete'))),
     pkg.quotable ? el('blockquote', { class: 'sample' }, `“${pkg.quotable}”`) : null,
@@ -250,6 +251,45 @@ function metadataTab(pkg) {
       el('span', { class: 'field-label' }, 'llms.txt'),
       el('p', { class: 'muted' }, 'Your studio serves a live llms.txt for AI crawlers — publish its contents at yourdomain.com/llms.txt.'),
       el('a', { class: 'btn btn-ghost btn-xs', href: '/llms.txt', target: '_blank' }, 'Open /llms.txt')));
+}
+
+export function websiteKit(pkg, profile) {
+  const li = pkg.platforms?.linkedin?.fields || {};
+  const yt = pkg.platforms?.youtube_long?.fields || {};
+  const title = fieldText(li.article_title) || pkg.topic;
+  const slug = pkg.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  const metaDesc = (pkg.faq?.[0]?.a || fieldText(li.article)).replace(/[#*\n]+/g, ' ').trim().slice(0, 155);
+  const jsonld = Object.values(pkg.jsonld || {})
+    .map((v) => `<script type="application/ld+json">\n${JSON.stringify(v, null, 2)}\n</script>`)
+    .join('\n');
+  const altList = Object.values(pkg.altTexts || {});
+  return `# Website Kit — paste this whole prompt into Lovable
+
+Add a new article page to my site at /${slug}
+
+Page requirements:
+- Meta title: "${title}" (trim to 60 chars if longer)
+- Meta description: "${metaDesc}"
+- Render the article below preserving its heading hierarchy exactly (the # line is the page H1, ## lines are H2 sections, ### are H3). Readable column width, generous spacing.
+${fieldText(yt.title) ? `- Embed my YouTube video "${fieldText(yt.title)}" [FILL: paste YouTube URL after upload] above the article body.\n` : ''}- Keep the FAQ section as an accordion or clearly separated Q&A block.
+- Insert the JSON-LD below into the page <head> exactly as provided — do not modify it.
+- End the page with one CTA button: [FILL: CTA label + URL].
+- Add the page to the sitemap and link it from the articles/blog index.
+${altList.length ? `- Article images use these alt texts (match to the images I upload): ${altList.map((a) => `"${a}"`).join('; ')}\n` : ''}
+---
+
+ARTICLE (markdown — paste as page content):
+
+${fieldText(li.article) || '[FILL: generate the LinkedIn article in this package first — it doubles as the site article]'}
+
+---
+
+JSON-LD for the page <head>:
+
+\`\`\`html
+${jsonld || '<!-- rescore the package to build schema -->'}
+\`\`\`
+`;
 }
 
 function packageMarkdown(pkg) {

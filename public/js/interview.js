@@ -1,6 +1,19 @@
 import { api, appState } from './api.js';
 import { el, field, textInput, textArea, toast, spinner, readFileAsText, emptyState } from './ui.js';
 
+// Hints may be functions of the answers so far, letting examples follow the
+// industry declared in section 1 instead of showing cross-industry samples.
+const byIndustry = (variants, fallback) => (answers) => {
+  for (const source of [answers.industry, answers.niche]) {
+    const hay = (source || '').toLowerCase();
+    if (!hay) continue;
+    for (const [keyword, text] of variants) {
+      if (hay.includes(keyword)) return text;
+    }
+  }
+  return fallback;
+};
+
 const SECTIONS = [
   {
     id: 'identity', title: 'Who you are',
@@ -39,14 +52,23 @@ const SECTIONS = [
       { key: 'story_turning_point', label: 'The turning point: what moment put you on this path?', input: 'area', hint: 'A scene, not a summary — where were you, what changed' },
       { key: 'story_hardest_win', label: 'The hardest problem you ever solved for a client (and what it took)', input: 'area' },
       { key: 'story_misunderstood', label: 'What does everyone get wrong about your industry?', input: 'area', hint: 'This becomes your contrarian content engine' },
-      { key: 'story_moment', label: 'A sensory moment you keep coming back to', input: 'area', hint: 'The 6 a.m. deck coffee, the keys in a first-time buyer\'s hand…' },
+      { key: 'story_moment', label: 'A sensory moment you keep coming back to', input: 'area',
+        hint: byIndustry([
+          ['travel', 'The 6 a.m. coffee on deck as the fjord turns pink, the client\'s face at the gate…'],
+          ['real estate', 'The keys in a first-time buyer\'s hand, the sold sign going up at dusk…'],
+          ['food', 'The first table of the night, the sauce coming together at the last second…'],
+        ], 'A specific scene you can see, hear, and feel when you close your eyes') },
     ],
   },
   {
     id: 'proof', title: 'Proof & experience inventory',
     intro: 'The first E in E-E-A-T is Experience. AI engines reward verifiable, first-person proof.',
     questions: [
-      { key: 'proof_numbers', label: 'Your numbers', input: 'area', hint: 'Years, clients served, trips sold, homes closed, revenue managed — anything countable' },
+      { key: 'proof_numbers', label: 'Your numbers', input: 'area',
+        hint: byIndustry([
+          ['travel', 'Years planning travel, trips sold, countries visited, ships sailed, clients served — anything countable'],
+          ['real estate', 'Years licensed, homes closed, volume sold, average days on market — anything countable'],
+        ], 'Years in the field, clients served, results delivered — anything countable') },
       { key: 'proof_places', label: 'Where you\'ve actually been / what you\'ve actually done first-hand', input: 'area' },
       { key: 'proof_results', label: '2-3 client results you can tell as stories', input: 'area' },
       { key: 'proof_access', label: 'Access others don\'t have', input: 'area', hint: 'Supplier relationships, data, communities, tools' },
@@ -138,7 +160,7 @@ export function renderInterview(root) {
         const input = q.input === 'area'
           ? textArea({ value: answers[q.key] || '', rows: 3, oninput: (e) => { answers[q.key] = e.target.value; } })
           : textInput({ value: answers[q.key] || '', oninput: (e) => { answers[q.key] = e.target.value; } });
-        return field(q.label, input, q.hint);
+        return field(q.label, input, typeof q.hint === 'function' ? q.hint(answers) : q.hint);
       }),
       el('div', { class: 'row gap' },
         step > 0 ? el('button', { class: 'btn btn-ghost', onclick: async () => { await persist(); step -= 1; render(); } }, '← Back') : null,

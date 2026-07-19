@@ -145,7 +145,7 @@ export function renderInterview(root) {
       el('div', { class: 'view-head' },
         el('div', {},
           el('h1', {}, 'Story Interview'),
-          el('p', { class: 'sub' }, 'A guided deep-dive that becomes the Story Brief powering every asset the studio creates.')),
+          el('p', { class: 'sub' }, 'Every question is optional — skip anything your Voice DNA files already cover; the Story Brief reads those too. Spend your typing on what no document has: specific scenes, numbers, and moments.')),
         el('div', { class: 'stepper' },
           SECTIONS.map((s, i) => el('button', {
             class: `step ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`,

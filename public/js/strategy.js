@@ -3,11 +3,25 @@ import { el, field, textInput, textArea, toast, spinner, download } from './ui.j
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-function timesPerWeek(cadence = '') {
+const DAY_PATTERNS = [
+  /\bmon(?:day)?\b/, /\btue(?:s|sday)?\b/, /\bwed(?:s|nesday)?\b/,
+  /\bthu(?:r|rs|rsday)?\b/, /\bfri(?:day)?\b/, /\bsat(?:urday)?\b/, /\bsun(?:day)?\b/,
+];
+
+export function explicitDays(cadence = '') {
   const c = cadence.toLowerCase();
-  if (c.includes('daily')) return 7;
-  const m = c.match(/(\d+)\s*x/);
+  return DAY_PATTERNS.reduce((days, re, i) => (re.test(c) ? [...days, i] : days), []);
+}
+
+export function timesPerWeek(cadence = '') {
+  const c = cadence.toLowerCase();
+  if (c.includes('daily') || c.includes('every day')) return 7;
+  const m = c.match(/(\d+)\s*(?:x|times?)/);
   if (m) return Math.min(7, +m[1]);
+  if (c.includes('twice')) return 2;
+  if (c.includes('three times')) return 3;
+  const days = explicitDays(c);
+  if (days.length) return days.length;
   if (c.includes('month')) return 0.25;
   return 1;
 }
@@ -88,7 +102,7 @@ export function renderStrategy(root) {
             if (p.id === s.pillarId) opt.selected = true;
             return opt;
           })),
-          textInput({ value: s.cadence || '', placeholder: 'cadence', class: 'input cadence-input', oninput: (e) => { s.cadence = e.target.value; }, onchange: save }),
+          textInput({ value: s.cadence || '', placeholder: '3x week · daily · Mon/Wed/Fri', class: 'input cadence-input', oninput: (e) => { s.cadence = e.target.value; }, onchange: save }),
           el('button', {
             class: 'btn btn-danger btn-xs', onclick: async () => {
               profile.series = profile.series.filter((x) => x.id !== s.id);
@@ -115,11 +129,22 @@ function weekPlan(profile) {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const slots = days.map((d) => ({ day: d, entries: [] }));
   const sorted = [...profile.series].sort((a, b) => timesPerWeek(b.cadence) - timesPerWeek(a.cadence));
+  let cursor = 0;
   for (const s of sorted) {
-    const n = Math.max(1, Math.round(timesPerWeek(s.cadence)));
-    if (timesPerWeek(s.cadence) < 1) { slots[0].entries.push(`${s.name} (monthly)`); continue; }
-    const stride = Math.floor(7 / n) || 1;
-    for (let i = 0, d = 0; i < n && d < 7; i++, d += stride) slots[d].entries.push(s.name);
+    const named = explicitDays(s.cadence);
+    if (named.length) {
+      for (const d of named) slots[d].entries.push(s.name);
+      continue;
+    }
+    const n = timesPerWeek(s.cadence);
+    if (n < 1) { slots[0].entries.push(`${s.name} (monthly)`); continue; }
+    if (n >= 7) { for (const slot of slots) slot.entries.push(s.name); continue; }
+    const count = Math.round(n);
+    const stride = 7 / count;
+    for (let i = 0; i < count; i++) {
+      slots[Math.floor(i * stride + cursor) % 7].entries.push(s.name);
+    }
+    cursor = (cursor + 1) % 7;
   }
 
   const ics = () => {

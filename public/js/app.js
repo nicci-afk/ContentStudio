@@ -21,6 +21,10 @@ function currentPath() {
   return (location.hash.replace(/^#\//, '') || 'dashboard').split('?')[0];
 }
 
+function currentParams() {
+  return new URLSearchParams(location.hash.split('?')[1] || '');
+}
+
 function workspaceSwitcher() {
   const ws = appState.workspaces || { items: [], activeId: null };
   const select = el('select', {
@@ -74,7 +78,7 @@ function route() {
   const path = currentPath();
   const r = ROUTES.find((x) => x.path === path) || ROUTES[0];
   renderNav();
-  r.render(document.getElementById('view'));
+  r.render(document.getElementById('view'), currentParams());
   window.scrollTo(0, 0);
 }
 

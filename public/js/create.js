@@ -3,7 +3,8 @@ import { el, field, textInput, textArea, toast, spinner, copyBtn, copyText, down
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
 
-export function renderCreate(root, openPackageId = null) {
+export function renderCreate(root, params = null) {
+  const openPackageId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
   const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.map((p) => p.id)), mediaIds: new Set(), autoMedia: true };
@@ -131,9 +132,19 @@ export function renderCreate(root, openPackageId = null) {
   };
 
   const openDetail = async (id) => {
-    const { package: pkg } = await api.pkg(id);
+    let pkg;
+    try {
+      ({ package: pkg } = await api.pkg(id));
+    } catch {
+      sessionStorage.removeItem('cs-last-pkg');
+      return;
+    }
+    sessionStorage.setItem('cs-last-pkg', pkg.id);
+    history.replaceState(null, '', `#/create?pkg=${pkg.id}`);
     detailWrap.replaceChildren(renderPackage(pkg, async () => {
       await api.deletePackage(pkg.id);
+      sessionStorage.removeItem('cs-last-pkg');
+      history.replaceState(null, '', '#/create');
       detailWrap.replaceChildren();
       await drawList();
     }));

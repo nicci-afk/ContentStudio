@@ -1,0 +1,18 @@
+{
+  "name": "contentstudio",
+  "version": "1.0.0",
+  "description": "Standalone AI-visibility content studio: interview-driven storytelling, voice DNA, media intelligence, and 11-platform content packages scored against E-E-A-T+ and answer-engine (AEO/GEO) standards.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "license": "UNLICENSED"
+}

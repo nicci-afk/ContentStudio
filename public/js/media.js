@@ -161,7 +161,10 @@ function drawScaled(source, w, h, max) {
 const canvasB64 = (canvas, q) => canvas.toDataURL('image/jpeg', q).split(',')[1];
 
 async function imageFrames(file) {
-  const bitmap = await createImageBitmap(file).catch(() => null);
+  // Ask the browser to decode already-downscaled: a 48MP HEIC becomes a
+  // ~1600px bitmap instead of a ~190MB full-resolution one.
+  let bitmap = await createImageBitmap(file, { resizeWidth: 1600, resizeQuality: 'medium' }).catch(() => null);
+  if (!bitmap) bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -169,8 +172,26 @@ async function imageFrames(file) {
     URL.revokeObjectURL(url);
     return frames(img, img.naturalWidth, img.naturalHeight);
   }
-  return frames(bitmap, bitmap.width, bitmap.height);
+  const result = frames(bitmap, bitmap.width, bitmap.height);
+  bitmap.close?.();
+  return result;
 }
+
+const placeholderThumb = (() => {
+  let cached = null;
+  return () => {
+    if (!cached) {
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#1a2032'; ctx.fillRect(0, 0, 320, 240);
+      ctx.fillStyle = '#8b96b0'; ctx.font = '28px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('▶ video', 160, 128);
+      cached = c.toDataURL('image/jpeg', 0.7).split(',')[1];
+    }
+    return cached;
+  };
+})();
 
 function frames(source, w, h) {
   return {
@@ -180,36 +201,74 @@ function frames(source, w, h) {
   };
 }
 
-function videoFrames(file) {
-  return new Promise((resolve, reject) => {
+// A video that can't produce a frame must never wedge the import: after the
+// timeout it resolves with a placeholder poster and the file still comes in
+// with its date, GPS, and metadata intact.
+function videoFrames(file, timeoutMs = 12000) {
+  return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
-    const video = el('video', { muted: true, playsinline: true, preload: 'auto' });
-    video.src = url;
-    video.onloadeddata = () => { video.currentTime = Math.min(0.6, (video.duration || 1) / 3); };
+    const video = el('video', {
+      muted: true, playsinline: true, preload: 'auto',
+      style: 'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;',
+    });
+    video.muted = true;
+    document.body.append(video);
+    let settled = false;
+    const fallback = () => ({ w: null, h: null, thumbB64: placeholderThumb(), analysisB64: null, timedOut: true });
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      video.remove();
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish(fallback()), timeoutMs);
+    video.onloadeddata = () => {
+      try { video.currentTime = Math.min(0.6, (video.duration || 1) / 3); } catch { finish(fallback()); }
+    };
     video.onseeked = () => {
       try {
         const result = frames(video, video.videoWidth, video.videoHeight);
         result.duration = Math.round(video.duration || 0);
-        URL.revokeObjectURL(url);
-        resolve(result);
-      } catch (err) { reject(err); }
+        finish(result);
+      } catch { finish(fallback()); }
     };
-    video.onerror = () => reject(new Error(`Could not decode ${file.name}`));
+    video.onerror = () => finish(fallback());
+    video.src = url;
+    video.load();
+    video.play().then(() => video.pause()).catch(() => { /* decode nudge only */ });
   });
 }
 
 // ---- import + analyze pipeline -------------------------------------------
 
-async function importFiles(files, onStatus) {
+async function importFiles(files, onStatus, existing = []) {
+  const seen = new Set(existing.map((i) => `${i.name}|${i.size}`));
+  const fresh = [];
+  let skipped = 0;
+  for (const f of files) {
+    if (seen.has(`${f.name}|${f.size}`)) skipped += 1;
+    else fresh.push(f);
+  }
+
+  let wake = null;
+  try { wake = await navigator.wakeLock?.request('screen'); } catch { /* unsupported */ }
+
   let done = 0;
-  onStatus(`Importing 0/${files.length} (4 in parallel)…`);
-  const results = await pool([...files], 4, async (file) => {
+  let timedOut = 0;
+  const tick = () => onStatus(
+    `Importing ${done}/${fresh.length}${skipped ? ` · ${skipped} already in library` : ''}…`);
+  tick();
+
+  const work = async (file) => {
     const isVideo = file.type.startsWith('video');
     const [exif, gps, f] = await Promise.all([
       isVideo ? {} : extractImageExif(file),
       isVideo ? extractVideoGps(file) : null,
       isVideo ? videoFrames(file) : imageFrames(file),
     ]);
+    if (f.timedOut) timedOut += 1;
     const { item } = await api.addMedia({
       name: file.name, mime: file.type || 'application/octet-stream',
       kind: isVideo ? 'video' : 'image', size: file.size,
@@ -218,12 +277,25 @@ async function importFiles(files, onStatus) {
       gps: exif.gps || gps || null,
       thumbB64: f.thumbB64, analysisB64: f.analysisB64,
     });
-    onStatus(`Importing ${++done}/${files.length} (4 in parallel)…`);
+    done += 1;
+    tick();
     return item;
-  });
+  };
+
+  // Photos fan out; videos go single-file — parallel video decode is what
+  // stalls phone browsers.
+  const [imageResults, videoResults] = await Promise.all([
+    pool(fresh.filter((f) => !f.type.startsWith('video')), 3, work),
+    pool(fresh.filter((f) => f.type.startsWith('video')), 1, work),
+  ]);
+  try { await wake?.release?.(); } catch { /* released with tab */ }
+
+  const results = [...imageResults, ...videoResults];
   for (const r of results) {
     if (r?.__error) toast(`${r.__name}: ${r.__error}`, 'err');
   }
+  if (skipped) toast(`${skipped} file(s) already imported — skipped instantly`);
+  if (timedOut) toast(`${timedOut} video(s) saved without a preview frame (kept date/GPS; this device couldn't decode them)`, 'err');
   return results.filter((r) => r && !r.__error);
 }
 
@@ -270,12 +342,12 @@ export function renderLibrary(root) {
     onchange: async (e) => {
       const files = [...e.target.files];
       if (!files.length) return;
-      await importFiles(files, (msg) => status.replaceChildren(spinner(msg)));
+      const imported = await importFiles(files, (msg) => status.replaceChildren(spinner(msg)), items);
       status.replaceChildren();
       e.target.value = '';
       await refresh();
-      toast(`${files.length} asset(s) imported`);
-      if (aiReady) analyzeAll();
+      toast(`${imported.length} asset(s) imported`);
+      if (aiReady && imported.length) analyzeAll();
     },
   });
 

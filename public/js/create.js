@@ -228,6 +228,15 @@ function metadataTab(pkg) {
     .map(([k, v]) => `<!-- ${k} -->\n<script type="application/ld+json">\n${JSON.stringify(v, null, 2)}\n</script>`)
     .join('\n\n');
   return el('div', {},
+    pkg.definition ? el('div', { class: 'asset-field' },
+      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Your definition (own the answer)'), copyBtn(pkg.definition)),
+      el('blockquote', { class: 'sample' }, pkg.definition)) : null,
+    (pkg.citeLines || []).length ? el('div', { class: 'asset-field' },
+      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Attribution-ready claim lines'), copyBtn(pkg.citeLines.join('\n'))),
+      el('ul', { class: 'plain-list' }, pkg.citeLines.map((c) => el('li', {}, c)))) : null,
+    (pkg.queryMap || []).length ? el('div', { class: 'asset-field' },
+      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Query map (phrasings this package should win)'), copyBtn(pkg.queryMap.join('\n'))),
+      el('div', { class: 'chip-row' }, pkg.queryMap.map((q) => el('span', { class: 'chip' }, q)))) : null,
     (pkg.faq || []).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'FAQ (AI-answer layer)'), copyBtn(pkg.faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n\n'))),
       pkg.faq.map((f) => el('div', { class: 'faq-pair' }, el('strong', {}, f.q), el('p', {}, f.a)))) : null,

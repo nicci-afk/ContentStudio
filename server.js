@@ -232,7 +232,7 @@ app.post('/api/pillars/suggest', wrap(async (req, res) => {
 const jobs = new Map();
 
 app.post('/api/generate', wrap(async (req, res) => {
-  const { topic, angle, pillarId, seriesId, platforms, mediaIds } = req.body;
+  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   const state = stateStore.get();
   const profile = state.profile;
@@ -245,7 +245,7 @@ app.post('/api/generate', wrap(async (req, res) => {
   jobs.set(jobId, job);
 
   generatePackage({
-    profile, topic, angle, pillar, series, media,
+    profile, topic, angle, pillar, series, media, ctaUrl,
     platformIds: platforms,
     onProgress: (p) => { job.progress = p; },
   })

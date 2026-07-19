@@ -6,7 +6,7 @@ const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : Str
 export function renderCreate(root, openPackageId = null) {
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
-  const form = { topic: '', angle: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.map((p) => p.id)), mediaIds: new Set() };
+  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.map((p) => p.id)), mediaIds: new Set() };
   let media = [];
 
   const formCard = el('div', { class: 'card form-card' });
@@ -24,6 +24,10 @@ export function renderCreate(root, openPackageId = null) {
         placeholder: 'e.g. Contrarian: the cheapest cabin is the wrong buy',
         value: form.angle, oninput: (e) => { form.angle = e.target.value; },
       })),
+      field('CTA link (optional)', textInput({
+        placeholder: 'https://your-apply-or-booking-page.com',
+        value: form.ctaUrl, oninput: (e) => { form.ctaUrl = e.target.value; },
+      }), 'Every platform gets its own tracked version (utm_source per platform) so you can see exactly which channel converts.'),
       el('div', { class: 'row gap wrap' },
         field('Pillar', el('select', { class: 'input select', onchange: (e) => { form.pillarId = e.target.value || null; } },
           el('option', { value: '' }, '— none —'),
@@ -75,6 +79,7 @@ export function renderCreate(root, openPackageId = null) {
     try {
       const { jobId } = await api.generate({
         topic: form.topic.trim(), angle: form.angle.trim() || null,
+        ctaUrl: form.ctaUrl.trim() || null,
         pillarId: form.pillarId, seriesId: form.seriesId,
         platforms: [...form.platforms], mediaIds: [...form.mediaIds],
       });
@@ -164,6 +169,13 @@ function renderPackage(pkg, onDelete) {
     if (!asset) return;
     if (asset.error) body.append(el('p', { class: 'warn' }, `Fell back to template for this platform: ${asset.error}`));
     body.append(el('p', { class: 'algo-note' }, spec?.algo || ''));
+    if (pkg.links?.[active]) {
+      body.append(el('div', { class: 'asset-field' },
+        el('div', { class: 'row spread' },
+          el('span', { class: 'field-label' }, 'Tracked CTA link (replace [LINK] with this)'),
+          copyBtn(pkg.links[active])),
+        el('pre', { class: 'asset-value code' }, pkg.links[active])));
+    }
     for (const f of spec?.fields || Object.keys(asset.fields).map((k) => ({ key: k, label: k }))) {
       const value = fieldText(asset.fields[f.key]);
       if (!value) continue;
@@ -237,6 +249,9 @@ function metadataTab(pkg) {
     (pkg.queryMap || []).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Query map (phrasings this package should win)'), copyBtn(pkg.queryMap.join('\n'))),
       el('div', { class: 'chip-row' }, pkg.queryMap.map((q) => el('span', { class: 'chip' }, q)))) : null,
+    Object.keys(pkg.links || {}).length ? el('div', { class: 'asset-field' },
+      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Tracked CTA links (one per platform)'), copyBtn(Object.entries(pkg.links).map(([k, v]) => `${k}: ${v}`).join('\n'))),
+      el('ul', { class: 'plain-list' }, Object.entries(pkg.links).map(([k, v]) => el('li', {}, `${k} → ${v}`)))) : null,
     (pkg.faq || []).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'FAQ (AI-answer layer)'), copyBtn(pkg.faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n\n'))),
       pkg.faq.map((f) => el('div', { class: 'faq-pair' }, el('strong', {}, f.q), el('p', {}, f.a)))) : null,

@@ -53,6 +53,9 @@ body {
 .brand strong { display: block; font-size: 15px; letter-spacing: 0.2px; }
 .brand-sub { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.4px; }
 
+.ws-switcher { padding: 0 4px; }
+.ws-select { font-size: 12.5px; padding: 7px 10px; color: var(--accent-2); border-color: rgba(78, 205, 196, 0.3); font-weight: 600; }
+
 .nav-links { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav-link {
   display: flex; align-items: center; gap: 10px;
@@ -265,6 +268,7 @@ h2 { font-size: 16px; margin: 0 0 10px; }
     border-right: none; border-bottom: 1px solid var(--line);
   }
   .brand-sub, .provider-dots { display: none; }
+  .ws-switcher { flex-shrink: 1; min-width: 0; max-width: 150px; }
   .nav-links { flex-direction: row; overflow-x: auto; flex: 1; }
   .nav-link { padding: 7px 10px; flex-shrink: 0; }
   .nav-label { display: none; }

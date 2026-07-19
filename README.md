@@ -49,6 +49,16 @@ Base URL: `http://localhost:4600`
 | GET | `/api/platforms` | Platform playbook (specs, limits, algorithm notes) |
 | GET | `/llms.txt` | Live AI-crawler manifest built from your profile |
 
+### Workspaces (one per business)
+Every business gets its own isolated workspace — profile, interview, voice DNA, media library, pillars, and packages. The switcher lives at the top of the sidebar; all endpoints below operate on the active workspace. Existing single-profile installs migrate automatically on first boot.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/workspaces` | List workspaces + active id |
+| POST | `/api/workspaces` | `{name}` → create and activate |
+| POST | `/api/workspaces/:id/activate` | Switch active workspace |
+| PATCH / DELETE | `/api/workspaces/:id` | Rename / delete (last one is protected) |
+
 ### Profile & strategy
 | Method | Path | Description |
 |---|---|---|

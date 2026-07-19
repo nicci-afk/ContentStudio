@@ -12,6 +12,11 @@ const send = (method, url, body) =>
 export const api = {
   health: () => get('/api/health'),
   platforms: () => get('/api/platforms'),
+  workspaces: () => get('/api/workspaces'),
+  createWorkspace: (name) => send('POST', '/api/workspaces', { name }),
+  activateWorkspace: (id) => send('POST', `/api/workspaces/${id}/activate`, {}),
+  renameWorkspace: (id, name) => send('PATCH', `/api/workspaces/${id}`, { name }),
+  deleteWorkspace: (id) => send('DELETE', `/api/workspaces/${id}`),
   state: () => get('/api/state'),
   saveState: (state) => send('PUT', '/api/state', state),
   patchState: (path, value) => send('PATCH', '/api/state', { path, value }),
@@ -54,9 +59,13 @@ export const appState = {
   state: null,
   health: null,
   platforms: [],
+  workspaces: { items: [], activeId: null },
   async boot() {
-    [this.health, this.state] = await Promise.all([api.health(), api.state()]);
+    [this.health, this.state, this.workspaces] = await Promise.all([api.health(), api.state(), api.workspaces()]);
     this.platforms = (await api.platforms()).platforms;
+  },
+  async reloadWorkspace() {
+    [this.state, this.workspaces] = await Promise.all([api.state(), api.workspaces()]);
   },
   get profile() {
     return this.state?.profile || {};

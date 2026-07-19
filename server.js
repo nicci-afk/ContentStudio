@@ -14,7 +14,8 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles } =
+const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles,
+  listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -69,6 +70,32 @@ app.get('/api/platforms', (req, res) => res.json({ platforms: platformList() }))
 
 app.get('/llms.txt', (req, res) => {
   res.type('text/plain').send(buildLlmsTxt(stateStore.get().profile, packageStore.get().items));
+});
+
+// ---- workspaces (one per business; all data below is workspace-scoped) ---
+
+app.get('/api/workspaces', (req, res) => res.json(listWorkspaces()));
+
+app.post('/api/workspaces', (req, res) => {
+  createWorkspace(req.body?.name);
+  res.json(listWorkspaces());
+});
+
+app.post('/api/workspaces/:id/activate', (req, res) => {
+  if (!activateWorkspace(req.params.id)) return res.status(404).json({ error: 'unknown workspace' });
+  res.json(listWorkspaces());
+});
+
+app.patch('/api/workspaces/:id', (req, res) => {
+  if (!renameWorkspace(req.params.id, req.body?.name)) return res.status(400).json({ error: 'name required' });
+  res.json(listWorkspaces());
+});
+
+app.delete('/api/workspaces/:id', (req, res) => {
+  if (!deleteWorkspace(req.params.id)) {
+    return res.status(400).json({ error: 'cannot delete the last workspace (or unknown id)' });
+  }
+  res.json(listWorkspaces());
 });
 
 // ---- state ---------------------------------------------------------------

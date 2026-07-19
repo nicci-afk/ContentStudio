@@ -21,6 +21,32 @@ function currentPath() {
   return (location.hash.replace(/^#\//, '') || 'dashboard').split('?')[0];
 }
 
+function workspaceSwitcher() {
+  const ws = appState.workspaces || { items: [], activeId: null };
+  const select = el('select', {
+    class: 'input select ws-select',
+    onchange: async (e) => {
+      if (e.target.value === '__new__') {
+        const name = prompt('Name the new business workspace (e.g. "Travel GHR" or "RE/MAX Alliance"):');
+        if (!name) { e.target.value = ws.activeId; return; }
+        appState.workspaces = await api.createWorkspace(name);
+      } else {
+        appState.workspaces = await api.activateWorkspace(e.target.value);
+      }
+      await appState.reloadWorkspace();
+      toast(`Switched to ${appState.workspaces.items.find((w) => w.id === appState.workspaces.activeId)?.name || 'workspace'}`);
+      route();
+    },
+  },
+    ws.items.map((w) => {
+      const o = el('option', { value: w.id }, w.name);
+      if (w.id === ws.activeId) o.selected = true;
+      return o;
+    }),
+    el('option', { value: '__new__' }, '＋ New business…'));
+  return el('div', { class: 'ws-switcher', title: 'Each business gets its own profile, voice, library, and packages' }, select);
+}
+
 function renderNav() {
   const nav = document.getElementById('nav');
   const path = currentPath();
@@ -31,6 +57,7 @@ function renderNav() {
       el('div', {},
         el('strong', {}, 'ContentStudio'),
         el('span', { class: 'brand-sub' }, 'AI Visibility Engine'))),
+    workspaceSwitcher(),
     el('div', { class: 'nav-links' },
       ROUTES.map((r) => el('a', {
         class: `nav-link ${r.path === path ? 'active' : ''}`,

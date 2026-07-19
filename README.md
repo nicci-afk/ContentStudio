@@ -95,7 +95,9 @@ curl -X POST http://localhost:4600/api/generate \
 
 ## Deploying
 
-Any Node 18+ host works. `Dockerfile` included:
+**Render (recommended):** this repo ships a `render.yaml` blueprint. In Render choose **New → Blueprint**, connect the repo, pick the branch, and Render provisions the service with a persistent 1 GB disk for your data. It prompts for `STUDIO_PASSWORD` (required — gates the whole studio behind a password) and your provider keys (optional, add later in the Environment tab anytime).
+
+Any other Node 18+ host also works. `Dockerfile` included:
 
 ```bash
 docker build -t contentstudio . && docker run -p 4600:4600 --env-file .env -v cs-data:/app/data contentstudio

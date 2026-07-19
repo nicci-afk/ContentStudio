@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: contentstudio
+    runtime: node
+    plan: starter
+    branch: claude/content-studio-ai-visibility-shlgxc
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    disk:
+      name: contentstudio-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: CONTENTSTUDIO_DATA
+        value: /var/data
+      - key: STUDIO_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: HEYGEN_API_KEY
+        sync: false

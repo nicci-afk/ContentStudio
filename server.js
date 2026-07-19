@@ -25,6 +25,26 @@ const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, an
 const { DEMO_STATE } = await import('./lib/demo.js');
 
 const app = express();
+
+// When STUDIO_PASSWORD is set (any public deployment), the whole studio —
+// UI and API — sits behind HTTP Basic auth. Any username, one password.
+const password = process.env.STUDIO_PASSWORD;
+if (password) {
+  const crypto = await import('node:crypto');
+  const hash = (s) => crypto.createHash('sha256').update(String(s)).digest();
+  const expected = hash(password);
+  app.use((req, res, next) => {
+    const header = req.headers.authorization || '';
+    if (header.startsWith('Basic ')) {
+      const token = Buffer.from(header.slice(6), 'base64').toString();
+      const supplied = token.slice(token.indexOf(':') + 1);
+      if (crypto.timingSafeEqual(hash(supplied), expected)) return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="ContentStudio"');
+    res.status(401).send('ContentStudio: password required');
+  });
+}
+
 app.use(express.json({ limit: '80mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 

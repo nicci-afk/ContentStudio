@@ -287,9 +287,14 @@ function producePanel(pkg, platformId) {
       renderList.replaceChildren(...mine.map((r) => el('div', { class: 'render-row' },
         el('video', { controls: true, preload: 'metadata', class: 'video-player', src: `/api/render/${r.id}/video` }),
         el('div', { class: 'row gap' },
-          el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${r.platformId}-${r.id}.mp4` }, '⬇ MP4'),
-          el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${r.id}.srt` }, '⬇ Captions (.srt)'),
-          el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}`)))));
+          (() => {
+            const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+            return [
+              el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${slug}-${r.platformId}.mp4` }, '⬇ MP4 (keyword filename)'),
+              el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
+            ];
+          })(),
+          el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}`)))));
     } catch { /* list is best-effort */ }
   };
 

@@ -355,7 +355,7 @@ app.post('/api/render', wrap(async (req, res) => {
   const script = fields.script || fields.body || fields.post || '';
   const hookText = fields.hook || fields.hook_script || '';
   const renderId = startRender({
-    pkg, platformId, script, hookText, voiceId: voiceId || null,
+    pkg, profile: stateStore.get().profile, platformId, script, hookText, voiceId: voiceId || null,
     orientation: orientation || (platformId === 'youtube_long' ? 'landscape' : 'portrait'),
     avatar: avatar || null,
   });

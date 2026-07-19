@@ -24,6 +24,7 @@ export const api = {
 
   interviewBrief: (answers) => send('POST', '/api/interview/brief', { answers }),
   voiceDna: (files) => send('POST', '/api/voice-dna', { files }),
+  removeVoiceSource: (name) => send('POST', '/api/voice-dna/remove', { name }),
 
   media: () => get('/api/media'),
   addMedia: (item) => send('POST', '/api/media', item),

@@ -217,7 +217,7 @@ export function renderVoice(root) {
   const drop = el('div', { class: 'card drop-zone' },
     el('h2', {}, 'Feed the studio your voice'),
     el('p', { class: 'intro' },
-      'Upload your MD profile files — brand voice docs, bios, past posts, newsletters, anything written in your voice (.md or .txt, several at once). The studio builds a forensic voice fingerprint and writes everything in it.'),
+      'Upload your MD profile files — brand voice docs, bios, past posts, newsletters, anything written in your voice (.md or .txt, several at once). Files ADD to the fingerprint: upload new material anytime as the brand grows, and the voice re-synthesizes from everything combined. Re-uploading a filename replaces that file.'),
     el('input', {
       class: 'file-input', type: 'file', multiple: true, accept: '.md,.markdown,.txt,text/markdown,text/plain',
       onchange: async (e) => {
@@ -262,8 +262,17 @@ export function renderVoice(root) {
 
   if (dna?.sources?.length) {
     container.append(el('div', { class: 'card' },
-      el('h2', {}, 'Sources ingested'),
-      el('ul', { class: 'plain-list' }, dna.sources.map((f) => el('li', {}, `${f.name} — ${Math.round((f.chars || 0) / 1000)}k chars`)))));
+      el('h2', {}, 'Sources in the fingerprint'),
+      el('ul', { class: 'plain-list' }, dna.sources.map((f) => el('li', { class: 'row gap' },
+        el('span', {}, `${f.name} — ${Math.round((f.chars || 0) / 1000)}k chars`),
+        el('button', {
+          class: 'btn btn-danger btn-xs', onclick: async () => {
+            const { voiceDna } = await api.removeVoiceSource(f.name);
+            appState.state.profile.voiceDna = voiceDna;
+            toast(`${f.name} removed — fingerprint re-synthesized`);
+            renderVoice(root);
+          },
+        }, '×'))))));
   } else if (!s) {
     container.append(emptyState('No voice sources yet', 'Upload 2-5 files of your real writing for the strongest fingerprint.'));
   }

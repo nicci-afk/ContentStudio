@@ -144,13 +144,40 @@ app.post('/api/interview/brief', wrap(async (req, res) => {
   res.json({ brief });
 }));
 
+// Additive: new files stack onto the existing corpus (same filename replaces
+// that file), and the fingerprint re-synthesizes from everything combined.
 app.post('/api/voice-dna', wrap(async (req, res) => {
   const state = stateStore.get();
-  const files = (req.body.files || []).map((f) => ({ name: f.name, text: String(f.text || '').slice(0, 100000) }));
-  const summary = await synthesizeVoiceDna(files);
+  const prior = state.profile.voiceDna || {};
+  const incoming = (req.body.files || []).map((f) => ({
+    name: f.name, text: String(f.text || '').slice(0, 100000),
+  }));
+  const kept = (prior.corpus || []).filter((e) => !incoming.some((i) => i.name === e.name));
+  const corpus = [...kept, ...incoming.map((f) => ({ name: f.name, text: f.text.slice(0, 20000) }))].slice(-24);
+  const summary = await synthesizeVoiceDna(corpus);
+  const priorMeta = Object.fromEntries((prior.sources || []).map((s) => [s.name, s]));
   state.profile.voiceDna = {
-    sources: files.map((f) => ({ name: f.name, chars: f.text.length, addedAt: new Date().toISOString() })),
-    corpus: files.map((f) => ({ name: f.name, text: f.text.slice(0, 20000) })),
+    sources: corpus.map((f) => ({
+      name: f.name, chars: f.text.length,
+      addedAt: incoming.some((i) => i.name === f.name)
+        ? new Date().toISOString()
+        : (priorMeta[f.name]?.addedAt || new Date().toISOString()),
+    })),
+    corpus,
+    summary,
+  };
+  stateStore.set(state);
+  res.json({ voiceDna: state.profile.voiceDna });
+}));
+
+app.post('/api/voice-dna/remove', wrap(async (req, res) => {
+  const state = stateStore.get();
+  const prior = state.profile.voiceDna || {};
+  const corpus = (prior.corpus || []).filter((e) => e.name !== req.body?.name);
+  const summary = corpus.length ? await synthesizeVoiceDna(corpus) : null;
+  state.profile.voiceDna = {
+    sources: (prior.sources || []).filter((s) => s.name !== req.body?.name),
+    corpus,
     summary,
   };
   stateStore.set(state);

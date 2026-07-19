@@ -39,6 +39,7 @@ export const api = {
   packages: () => get('/api/packages'),
   pkg: (id) => get(`/api/packages/${id}`),
   rescore: (id) => send('POST', `/api/packages/${id}/rescore`, {}),
+  editPackageField: (id, platformId, field, value) => send('PATCH', `/api/packages/${id}`, { platformId, field, value }),
   deletePackage: (id) => send('DELETE', `/api/packages/${id}`),
 
   voices: () => get('/api/voice/voices'),

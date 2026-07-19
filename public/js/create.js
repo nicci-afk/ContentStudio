@@ -204,13 +204,34 @@ function renderPackage(pkg, onDelete) {
     for (const f of spec?.fields || Object.keys(asset.fields).map((k) => ({ key: k, label: k }))) {
       const value = fieldText(asset.fields[f.key]);
       if (!value) continue;
-      body.append(el('div', { class: 'asset-field' },
+      const pre = el('pre', { class: 'asset-value' }, value);
+      const fieldBox = el('div', { class: 'asset-field' },
         el('div', { class: 'row spread' },
           el('span', { class: 'field-label' }, f.label),
           el('div', { class: 'row gap' },
             el('span', { class: 'muted char-count' }, `${value.length} chars`),
-            copyBtn(value))),
-        el('pre', { class: 'asset-value' }, value)));
+            el('button', {
+              class: 'btn btn-ghost btn-xs', onclick: () => {
+                const ta = el('textarea', { class: 'input textarea asset-edit', rows: Math.min(18, Math.max(4, value.split('\n').length + 1)) });
+                ta.value = fieldText(pkg.platforms[active].fields[f.key]);
+                const save = el('button', {
+                  class: 'btn btn-primary btn-xs', onclick: async () => {
+                    try {
+                      const { package: updated } = await api.editPackageField(pkg.id, active, f.key, ta.value);
+                      Object.assign(pkg, updated);
+                      toast('Saved — rescored');
+                      drawTabs();
+                      drawBody();
+                    } catch (err) { toast(err.message, 'err'); }
+                  },
+                }, 'Save');
+                const cancel = el('button', { class: 'btn btn-ghost btn-xs', onclick: () => { drawBody(); } }, 'Cancel');
+                pre.replaceWith(el('div', {}, ta, el('div', { class: 'row gap', style: 'margin-top:8px' }, save, cancel)));
+              },
+            }, '✎ Edit'),
+            copyBtn(() => fieldText(pkg.platforms[active].fields[f.key])))),
+        pre);
+      body.append(fieldBox);
     }
     const script = fieldText(asset.fields.script || asset.fields.article || asset.fields.post);
     if (script.length > 100) {

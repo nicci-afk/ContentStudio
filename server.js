@@ -308,6 +308,24 @@ app.get('/api/packages/:id', (req, res) => {
   res.json({ package: pkg });
 });
 
+app.patch('/api/packages/:id', (req, res) => {
+  const { platformId, field, value } = req.body || {};
+  const profile = stateStore.get().profile;
+  let pkg = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      if (!p.platforms?.[platformId]?.fields || typeof field !== 'string') return p;
+      p.platforms[platformId].fields[field] = value;
+      p.jsonld = buildJsonLd(p, profile);
+      p.visibility = scorePackage(p, profile);
+      return (pkg = p);
+    }),
+  }));
+  if (!pkg) return res.status(404).json({ error: 'unknown package/platform/field' });
+  res.json({ package: pkg });
+});
+
 app.post('/api/packages/:id/rescore', (req, res) => {
   const state = stateStore.get();
   let pkg = null;

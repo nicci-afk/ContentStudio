@@ -34,6 +34,7 @@ const SECTIONS = [
       { key: 'youtube', label: 'YouTube URL', input: 'text' },
       { key: 'instagram', label: 'Instagram URL', input: 'text' },
       { key: 'gbp', label: 'Google Business Profile URL', input: 'text' },
+      { key: 'neverMention', label: 'Never mention (hard blocklist)', input: 'text', hint: 'Comma-separated names/terms that must NEVER appear in any generated content — enforced in every generation and checked by the visibility score' },
     ],
   },
   {
@@ -109,6 +110,7 @@ function businessFromAnswers(a) {
     name: a.name || '', tagline: a.tagline || '', industry: a.industry || '',
     niche: a.niche || '', location: a.location || '', audience: a.audience || '',
     offers: a.offers || '', localBusiness: true,
+    neverMention: (a.neverMention || '').split(',').map((s) => s.trim()).filter(Boolean),
     person: { name: a.personName || '', title: a.personTitle || '', credentials: a.credentials || '', sameAs: [a.youtube, a.instagram].filter(Boolean) },
     links: { website: a.website || '', youtube: a.youtube || '', instagram: a.instagram || '', gbp: a.gbp || '' },
   };
@@ -126,6 +128,7 @@ export function renderInterview(root) {
     offers: answers.offers ?? biz.offers,
     website: answers.website ?? biz.links?.website, youtube: answers.youtube ?? biz.links?.youtube,
     instagram: answers.instagram ?? biz.links?.instagram, gbp: answers.gbp ?? biz.links?.gbp,
+    neverMention: answers.neverMention ?? (biz.neverMention || []).join(', '),
   });
 
   let step = 0;

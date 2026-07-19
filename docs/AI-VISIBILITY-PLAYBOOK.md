@@ -51,6 +51,15 @@ Four to five pillars, weighted for AI visibility (the studio's default shape):
 
 Expressed as **named recurring series** ("Sunday Ship Review," "60-Second Verdict") — episodic naming builds audience habit and entity recognition simultaneously.
 
+## The YouTube retention loop
+
+Publishing is half the job; the other half is reading the audience-retention graph in YouTube Studio after every long-form video:
+
+- **Above 30% average retention** = a good video. **Above 60%** = wildly successful. Everything loses ~30% in the first seconds (misclicks); what matters is the slope after.
+- **Find every sharp dip**, open the video at that timestamp, name what caused the drop (telegraphed ending, slow segment, promise drift), and eliminate it from the next episode.
+- **Find what held** and recreate it deliberately. The series format ("play pattern") should evolve from this evidence, not taste.
+- Craft floor so authentic never becomes garbage: deliberate lighting (rim light behind, light or a white-shirt reflector on the face), still camera with deliberate moves only, and **hold every shot 10-30 seconds** so the edit has room.
+
 ## The compounding loop
 
 1. Long-form YouTube answers one real question per week (pillar: Answers).

@@ -3,7 +3,7 @@ import { el, toast, spinner, emptyState, textInput } from './ui.js';
 
 // ---- EXIF (JPEG): capture date + GPS so real-world context rides along ---
 
-function parseExif(buffer) {
+export function parseExif(buffer) {
   try {
     const view = new DataView(buffer);
     if (view.getUint16(0) !== 0xffd8) return {};
@@ -82,6 +82,71 @@ function parseTiff(view, start) {
   return out;
 }
 
+// HEIC/HEIF (the iPhone default) wraps EXIF differently than JPEG: locate the
+// embedded "Exif\0\0" payload by byte scan, then parse the TIFF block as usual.
+export function scanForExif(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const limit = bytes.length - 8;
+  for (let i = 0; i < limit; i++) {
+    if (bytes[i] === 0x45 && bytes[i + 1] === 0x78 && bytes[i + 2] === 0x69
+      && bytes[i + 3] === 0x66 && bytes[i + 4] === 0 && bytes[i + 5] === 0) {
+      try {
+        const out = parseTiff(new DataView(buffer), i + 6);
+        if (out.takenAt || out.gps) return out;
+      } catch { /* keep scanning */ }
+    }
+  }
+  return {};
+}
+
+async function extractImageExif(file) {
+  try {
+    const head = await file.slice(0, 2 * 1024 * 1024).arrayBuffer();
+    if (file.type === 'image/jpeg' || /jpe?g$/i.test(file.name)) {
+      const viaMarkers = parseExif(head);
+      if (viaMarkers.takenAt || viaMarkers.gps) return viaMarkers;
+    }
+    return scanForExif(head);
+  } catch {
+    return {};
+  }
+}
+
+// iPhone videos carry GPS as an ISO6709 string ("+38.6270-090.1994+…") in
+// QuickTime metadata, near the start or end of the file.
+async function extractVideoGps(file) {
+  try {
+    const chunks = [await file.slice(0, 2 * 1024 * 1024).arrayBuffer()];
+    if (file.size > 2.5 * 1024 * 1024) {
+      chunks.push(await file.slice(file.size - 512 * 1024).arrayBuffer());
+    }
+    const dec = new TextDecoder('latin1');
+    for (const c of chunks) {
+      const m = dec.decode(c).match(/([+-]\d{1,3}\.\d{3,8})([+-]\d{1,3}\.\d{3,8})/);
+      if (m) return { lat: +(+m[1]).toFixed(5), lon: +(+m[2]).toFixed(5) };
+    }
+  } catch { /* no gps */ }
+  return null;
+}
+
+// Bounded-concurrency pool: keeps N files in flight so decode, canvas work,
+// uploads, and AI calls overlap instead of queueing single-file.
+async function pool(items, limit, worker) {
+  const queue = items.map((item, i) => [i, item]);
+  const results = new Array(items.length);
+  await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    while (queue.length) {
+      const [i, item] = queue.shift();
+      try {
+        results[i] = await worker(item, i);
+      } catch (err) {
+        results[i] = { __error: err.message, __name: item.name || String(i) };
+      }
+    }
+  }));
+  return results;
+}
+
 // ---- thumbnail + analysis frame extraction -------------------------------
 
 function drawScaled(source, w, h, max) {
@@ -111,7 +176,7 @@ function frames(source, w, h) {
   return {
     w, h,
     thumbB64: canvasB64(drawScaled(source, w, h, 360), 0.72),
-    analysisB64: canvasB64(drawScaled(source, w, h, 960), 0.78),
+    analysisB64: canvasB64(drawScaled(source, w, h, 800), 0.74),
   };
 }
 
@@ -137,30 +202,29 @@ function videoFrames(file) {
 
 async function importFiles(files, onStatus) {
   let done = 0;
-  const results = [];
-  for (const file of files) {
-    onStatus(`Importing ${++done}/${files.length}: ${file.name}`);
-    try {
-      const isVideo = file.type.startsWith('video');
-      let exif = {};
-      if (/jpe?g$/i.test(file.name) || file.type === 'image/jpeg') {
-        exif = parseExif(await file.slice(0, 256 * 1024).arrayBuffer());
-      }
-      const f = isVideo ? await videoFrames(file) : await imageFrames(file);
-      const { item } = await api.addMedia({
-        name: file.name, mime: file.type || 'application/octet-stream',
-        kind: isVideo ? 'video' : 'image', size: file.size,
-        w: f.w, h: f.h,
-        takenAt: exif.takenAt || (file.lastModified ? new Date(file.lastModified).toISOString() : null),
-        gps: exif.gps || null,
-        thumbB64: f.thumbB64, analysisB64: f.analysisB64,
-      });
-      results.push(item);
-    } catch (err) {
-      toast(`${file.name}: ${err.message}`, 'err');
-    }
+  onStatus(`Importing 0/${files.length} (4 in parallel)…`);
+  const results = await pool([...files], 4, async (file) => {
+    const isVideo = file.type.startsWith('video');
+    const [exif, gps, f] = await Promise.all([
+      isVideo ? {} : extractImageExif(file),
+      isVideo ? extractVideoGps(file) : null,
+      isVideo ? videoFrames(file) : imageFrames(file),
+    ]);
+    const { item } = await api.addMedia({
+      name: file.name, mime: file.type || 'application/octet-stream',
+      kind: isVideo ? 'video' : 'image', size: file.size,
+      w: f.w, h: f.h,
+      takenAt: exif.takenAt || (file.lastModified ? new Date(file.lastModified).toISOString() : null),
+      gps: exif.gps || gps || null,
+      thumbB64: f.thumbB64, analysisB64: f.analysisB64,
+    });
+    onStatus(`Importing ${++done}/${files.length} (4 in parallel)…`);
+    return item;
+  });
+  for (const r of results) {
+    if (r?.__error) toast(`${r.__name}: ${r.__error}`, 'err');
   }
-  return results;
+  return results.filter((r) => r && !r.__error);
 }
 
 export function renderLibrary(root) {
@@ -180,18 +244,25 @@ export function renderLibrary(root) {
     const pending = items.filter((i) => !i.analyzed);
     if (!pending.length) return toast('Everything is already analyzed');
     let n = 0;
-    for (const item of pending) {
-      status.replaceChildren(spinner(`Analyzing ${++n}/${pending.length}: ${item.name}`));
+    let stop = false;
+    status.replaceChildren(spinner(`Analyzing 0/${pending.length} (3 in parallel)…`));
+    const results = await pool(pending, 3, async (item) => {
+      if (stop) return null;
       try {
         await api.analyzeMedia(item.id);
       } catch (err) {
-        toast(`${item.name}: ${err.message}`, 'err');
-        if (/not configured/i.test(err.message)) break;
+        if (/not configured/i.test(err.message)) { stop = true; }
+        throw err;
       }
+      status.replaceChildren(spinner(`Analyzing ${++n}/${pending.length} (3 in parallel)…`));
+      return item.id;
+    });
+    for (const r of results) {
+      if (r?.__error && !stop) toast(`${r.__name}: ${r.__error}`, 'err');
     }
     status.replaceChildren();
     await refresh();
-    toast('Library analyzed — alt text, keywords, and story ideas attached');
+    toast(stop ? 'Analysis needs the Claude key on the server' : 'Library analyzed — alt text, keywords, geo, and story ideas attached');
   };
 
   const fileInput = el('input', {

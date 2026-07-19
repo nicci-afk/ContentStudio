@@ -51,6 +51,13 @@ Four to five pillars, weighted for AI visibility (the studio's default shape):
 
 Expressed as **named recurring series** ("Sunday Ship Review," "60-Second Verdict") — episodic naming builds audience habit and entity recognition simultaneously.
 
+## Capture doctrine (before the trip, on the trip)
+
+- **Plan the cluster before you travel.** Know the cluster keyword, the loose story arc, and the emotional payoff before arrival — find the story as you go, not in post. Generate the package (and its query map) BEFORE the trip; the B-roll map's [SHOOT] flags become the shot list.
+- **Always capture a beginning and an ending** (walking in the door, walking out) — everything in the middle can be edited between them.
+- **Run a 360 camera as a permanent secondary** — it catches the moments you physically couldn't watch for; POV glasses capture what a raised camera would break.
+- **Hold every shot 10-30 seconds.** AI editing tools find the segment; short clips leave nothing to find.
+
 ## The YouTube retention loop
 
 Publishing is half the job; the other half is reading the audience-retention graph in YouTube Studio after every long-form video:

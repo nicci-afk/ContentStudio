@@ -453,9 +453,9 @@ app.get('/api/avatar/avatars', wrap(async (req, res) => res.json({ avatars: awai
 app.get('/api/avatar/voices', wrap(async (req, res) => res.json({ voices: await heygenVoices() })));
 
 app.post('/api/avatar/generate', wrap(async (req, res) => {
-  const { avatarId, voiceId, text, title, orientation } = req.body;
+  const { avatarId, avatarKind, voiceId, text, title, orientation } = req.body;
   if (!avatarId || !voiceId || !text) return res.status(400).json({ error: 'avatarId, voiceId, text required' });
-  res.json(await heygenGenerate({ avatarId, voiceId, text, title, orientation }));
+  res.json(await heygenGenerate({ avatarId, avatarKind, voiceId, text, title, orientation }));
 }));
 
 app.get('/api/avatar/status/:id', wrap(async (req, res) => res.json(await heygenStatus(req.params.id))));

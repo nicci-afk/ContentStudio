@@ -111,8 +111,10 @@ export function renderAvatarStudio(root) {
   sessionStorage.removeItem('cs-script');
 
   let avatarId = null;
+  let avatarList = [];
   let voiceId = null;
   const avatarSelect = el('select', { class: 'input select', onchange: (e) => { avatarId = e.target.value; } });
+  const avatarNote = el('p', { class: 'muted', style: 'margin:6px 0 0;font-size:0.85em' });
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { voiceId = e.target.value; } });
   const orientation = el('select', { class: 'input select' },
     el('option', { value: 'portrait' }, 'Portrait 9:16 (Reels / Shorts / TikTok)'),
@@ -122,7 +124,7 @@ export function renderAvatarStudio(root) {
 
   container.append(el('div', { class: 'card' },
     el('h2', {}, 'Film with your avatar'),
-    field('Avatar', avatarSelect, 'Custom avatars trained on your footage appear here alongside stock avatars.'),
+    field('Avatar', el('div', {}, avatarSelect, avatarNote), 'Custom avatars trained on your footage appear here alongside stock avatars.'),
     field('Voice', voiceSelect, 'Pair with your ElevenLabs clone inside HeyGen for full realism.'),
     field('Orientation', orientation),
     field('Script', text),
@@ -132,7 +134,8 @@ export function renderAvatarStudio(root) {
         result.replaceChildren(spinner('Rendering avatar video — this takes a few minutes…'));
         try {
           const { videoId } = await api.avatarGenerate({
-            avatarId, voiceId, text: text.value,
+            avatarId, avatarKind: avatarList.find((a) => a.id === avatarId)?.kind || 'avatar',
+            voiceId, text: text.value,
             title: text.value.slice(0, 60), orientation: orientation.value,
           });
           const poll = async () => {
@@ -162,10 +165,29 @@ export function renderAvatarStudio(root) {
 
   root.replaceChildren(container);
 
-  api.avatars().then(({ avatars }) => {
-    avatarSelect.replaceChildren(...avatars.map((a) => el('option', { value: a.id }, a.name)));
-    avatarId = avatars[0]?.id || null;
-  }).catch((err) => toast(err.message, 'err'));
+  // Avatar list problems stay visible under the dropdown (a toast vanishes
+  // before anyone can read it) and are always retryable in place.
+  const loadAvatars = async () => {
+    avatarNote.textContent = 'Loading your avatars…';
+    try {
+      const { avatars } = await api.avatars();
+      avatarList = avatars;
+      avatarSelect.replaceChildren(...avatars.map((a) => el('option', { value: a.id },
+        a.kind === 'talking_photo' ? `${a.name} (your photo avatar)` : a.name)));
+      avatarId = avatars[0]?.id || null;
+      if (avatars.length) avatarNote.textContent = '';
+      else {
+        avatarNote.replaceChildren(
+          'No avatars are visible in your HeyGen account yet. Create one at heygen.com (Avatars, then Photo Avatar or Video Avatar), give it a minute, then ',
+          el('button', { class: 'btn btn-ghost btn-xs', onclick: loadAvatars }, '↻ check again'));
+      }
+    } catch (err) {
+      avatarNote.replaceChildren(
+        `The avatar list could not load: ${err.message}. `,
+        el('button', { class: 'btn btn-ghost btn-xs', onclick: loadAvatars }, '↻ Try again'));
+    }
+  };
+  loadAvatars();
   api.avatarVoices().then(({ voices }) => {
     voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
     voiceId = voices[0]?.id || null;

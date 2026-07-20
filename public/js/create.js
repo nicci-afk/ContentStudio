@@ -269,7 +269,7 @@ function renderPackage(pkg, onDelete) {
 function producePanel(pkg, platformId) {
   const panel = el('div', { class: 'produce-panel' });
   const defaultOrientation = platformId === 'youtube_long' ? 'landscape' : 'portrait';
-  const state = { voiceId: null, useAvatar: false, avatarId: null, heygenVoiceId: null, orientation: defaultOrientation };
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, orientation: defaultOrientation };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -295,11 +295,17 @@ function producePanel(pkg, platformId) {
       if (state.useAvatar && !avatarWrap.children.length) {
         try {
           const [{ avatars }, { voices }] = await Promise.all([api.avatars(), api.avatarVoices()]);
-          const aSel = el('select', { class: 'input select', onchange: (ev) => { state.avatarId = ev.target.value; } },
-            ...avatars.map((a) => el('option', { value: a.id }, a.name)));
+          if (!avatars.length) throw new Error('no avatars are visible in your HeyGen account yet; create one at heygen.com first');
+          const pickAvatar = (id) => {
+            state.avatarId = id;
+            state.avatarKind = avatars.find((a) => a.id === id)?.kind || 'avatar';
+          };
+          const aSel = el('select', { class: 'input select', onchange: (ev) => pickAvatar(ev.target.value) },
+            ...avatars.map((a) => el('option', { value: a.id },
+              a.kind === 'talking_photo' ? `${a.name} (your photo avatar)` : a.name)));
           const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; } },
             ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
-          state.avatarId = avatars[0]?.id || null;
+          pickAvatar(avatars[0]?.id || null);
           state.heygenVoiceId = voices[0]?.id || null;
           avatarWrap.append(aSel, vSel);
         } catch (err) {
@@ -348,7 +354,7 @@ function producePanel(pkg, platformId) {
         packageId: pkg.id, platformId,
         voiceId: state.voiceId,
         orientation: state.orientation,
-        avatar: state.useAvatar ? { avatarId: state.avatarId, voiceId: state.heygenVoiceId } : null,
+        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId } : null,
       });
       while (true) {
         await new Promise((r) => setTimeout(r, 4000));

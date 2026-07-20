@@ -65,26 +65,23 @@ multi-workspace, snapshots.
 long-form Auto-Produce render completed end to end on it (2026-07-20).
 Narration stays cached per voice+script hash, so retries are free.
 
-**PENDING DEPLOY (do this first next session):** branch
-`claude/verify-long-form-render-5cih00` holds tested, unreleased fixes:
-blur-fill slide layout (whole image visible over a blurred fill, both
-orientations); original video upload at import (streamed, 500MB cap) with
-re-import attaching footage to existing "frame only" items; real muted
-video clips cut into Auto-Produce b-roll (looped to slot, poster-frame
-fallback); HeyGen photo avatars (talking_photos) listed and rendered with
-kind-aware payloads everywhere; persistent avatar-list errors with retry
-in Avatar Studio; doctrine law 17. Deploy = confirm with the user that no
-render is running, then merge that branch into the deploy branch and
-push. After deploy the user must re-import their video files ONCE (their
-2026-07-20 re-import predated the deploy and was skipped as duplicates);
-Library badges flip "frame only" to "video" as footage attaches.
+**Deployed 2026-07-20:** blur-fill slide layout (whole image visible over
+a blurred fill, both orientations); original video upload at import
+(streamed, 500MB cap) with re-import attaching footage to existing
+"frame only" items; real muted video clips cut into Auto-Produce b-roll
+(looped to slot, poster-frame fallback); HeyGen photo avatars
+(talking_photos) listed and rendered with kind-aware payloads everywhere;
+persistent avatar-list errors with retry in Avatar Studio; doctrine law
+17. HeyGen API credits are loaded (a HeyGen 402 insufficient_credit was
+the earlier avatar block; resolved by the user).
 
 Active user workspace: "Conscious Creator" (application-launch campaign for a
 Feb 8-12 Akumal & Tulum retreat; pillars/series architecture documented in
-conversation and entered by the user). Launch sequence remaining: deploy
-the pending branch, re-import videos, produce the long-form YouTube video
-(landscape, avatar open now that HeyGen API credits are loaded), fill the
-[FILL] facts via the Edit buttons, then day-one publishing (YouTube +
+conversation and entered by the user). Launch sequence remaining: user
+re-imports their video files ONCE so footage attaches (pre-deploy imports
+were skipped as duplicates; Library badges flip "frame only" to "video"),
+then produce the long-form YouTube video (landscape, avatar open), fill
+the [FILL] facts via the Edit buttons, then day-one publishing (YouTube +
 Website Kit into Lovable + LinkedIn same day, then socials per the rhythm
 grid).
 

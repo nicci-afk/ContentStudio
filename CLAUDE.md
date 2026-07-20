@@ -77,13 +77,53 @@ the earlier avatar block; resolved by the user).
 
 Active user workspace: "Conscious Creator" (application-launch campaign for a
 Feb 8-12 Akumal & Tulum retreat; pillars/series architecture documented in
-conversation and entered by the user). Launch sequence remaining: user
-re-imports their video files ONCE so footage attaches (pre-deploy imports
-were skipped as duplicates; Library badges flip "frame only" to "video"),
-then produce the long-form YouTube video (landscape, avatar open), fill
-the [FILL] facts via the Edit buttons, then day-one publishing (YouTube +
-Website Kit into Lovable + LinkedIn same day, then socials per the rhythm
-grid).
+conversation and entered by the user). The launch package id is
+0d5825c2e277bfec (the pkg param on the Create view URL).
+
+**Deployed 2026-07-20, second push:** render details line shows the real
+clip count ("N real clips"); storage maintenance endpoints: GET
+/api/storage (disk totals plus per-workspace media/footage/renders/temp
+breakdown), POST /api/storage/cleanup (removes render temp folders no
+running job owns, plus partial uploads older than 10 minutes), POST
+/api/storage/renders/delete with {workspaceId, renderId}; a boot sweep
+deletes orphaned render temp folders at startup (logs "storage: swept
+..."); startRender refuses with a clear message when the data disk has
+under 1536MB free.
+
+**Launch handoff (2026-07-20).** The user re-imported footage, then the
+first long-form Auto-Produce attempt failed with ENOSPC: the data disk
+filled (footage originals plus orphaned render temp folders from earlier
+interrupted renders). The storage tools above shipped in response; their
+boot sweep freed the orphaned temp space automatically at deploy. That
+session's egress allowlist blocked contentstudio-zc9j.onrender.com; the
+user added the domain to the environment allowlist, which applies to
+sessions started after the change. Pickup order:
+1. Sign in to production from the session: POST /auth/magic/request with
+   {"email":"nicci@travelghr.com"}, read the one-time link from the
+   user's connected Gmail (subject "Your ContentStudio sign-in link",
+   expires in 15 minutes), GET it with a cookie jar; the cs_session
+   cookie lasts 30 days. Always confirm with the user before any push to
+   the deploy branch; every push restarts the server and kills renders
+   and uploads in flight.
+2. GET /api/storage: want 4-5GB free before the long-form render. POST
+   /api/storage/cleanup, and with the user's OK delete old renders via
+   /api/storage/renders/delete. If still tight, the user expands the
+   disk in the Render dashboard (disks only grow; resizing restarts the
+   service).
+3. GET /api/media: every video item must show hasOriginal true. Any
+   still false likely failed during the disk-full window; the user
+   re-imports just those files (attach matches exact file name + size).
+4. Produce the long-form YouTube video: UI Create view, or POST
+   /api/render with packageId, platformId "youtube_long", orientation
+   "landscape", the user's cloned ElevenLabs voice ("Nicci · your
+   clone"), avatar open enabled (avatar "Cynthia Grotefendt", HeyGen
+   voice "Smalls - Voice 1"). Poll GET /api/render/:id (10-20 min);
+   verify the finished meta shows videoClips > 0, captions true, avatar
+   true, and spot-check the MP4 (blur-fill layout, burned captions).
+5. Then: fill the [FILL] facts via the Edit buttons across the package,
+   re-check the visibility score, then day-one publishing (YouTube +
+   Website Kit into Lovable + LinkedIn same day, then socials per the
+   rhythm grid).
 
 ## Agreed roadmap (in order)
 

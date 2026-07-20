@@ -316,17 +316,28 @@ function producePanel(pkg, platformId) {
     try {
       const { items } = await api.packageRenders(pkg.id);
       const mine = items.filter((r) => r.platformId === platformId);
-      renderList.replaceChildren(...mine.map((r) => el('div', { class: 'render-row' },
-        el('video', { controls: true, preload: 'metadata', class: 'video-player', src: `/api/render/${r.id}/video` }),
-        el('div', { class: 'row gap' },
-          (() => {
-            const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
-            return [
-              el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${slug}-${r.platformId}.mp4` }, '⬇ MP4 (keyword filename)'),
-              el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
-            ];
-          })(),
-          el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}`)))));
+      renderList.replaceChildren(...mine.map((r) => {
+        const state = r.status || 'done';
+        if (state === 'running') {
+          return el('div', { class: 'render-row' },
+            el('span', { class: 'muted' }, `⏳ Rendering now — ${r.step || 'working'}… long-form with avatar can take 10-20 minutes. Safe to leave; it finishes on the server.`));
+        }
+        if (state !== 'done') {
+          return el('div', { class: 'render-row' },
+            el('span', { class: 'warn' }, `⚠ ${state}: ${r.error || 'render did not finish'}`));
+        }
+        return el('div', { class: 'render-row' },
+          el('video', { controls: true, preload: 'metadata', class: 'video-player', src: `/api/render/${r.id}/video` }),
+          el('div', { class: 'row gap' },
+            (() => {
+              const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+              return [
+                el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${slug}-${r.platformId}.mp4` }, '⬇ MP4 (keyword filename)'),
+                el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
+              ];
+            })(),
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+      }));
     } catch { /* list is best-effort */ }
   };
 
@@ -348,12 +359,15 @@ function producePanel(pkg, platformId) {
           await drawRenders();
           return;
         }
-        if (job.status === 'error') throw new Error(job.error || 'render failed');
+        if (job.status === 'error' || job.status === 'interrupted') throw new Error(job.error || 'render failed');
         result.replaceChildren(spinner(`Producing… ${job.step}`));
       }
     } catch (err) {
       result.replaceChildren();
-      toast(err.message, 'err');
+      toast(/unknown render/i.test(err.message)
+        ? 'The server restarted mid-render (an update deployed). Click Produce again.'
+        : err.message, 'err');
+      await drawRenders();
     }
   };
 

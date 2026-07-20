@@ -61,16 +61,32 @@ blocklist check, in-place field editing, Website Kit (Lovable prompt export),
 per-platform tracked CTA links, Auto-Produce video rendering, magic-link auth,
 multi-workspace, snapshots.
 
-**Known issue:** long-form Auto-Produce renders can OOM-crash the 512MB Render
-Starter instance at the avatar-combine / caption-burn stages (b-roll stage is
-already chunked; HeyGen download is streamed; narration is cached so retries
-are free). Fix: upgrade the Render instance to Standard 2GB. Short-form
-renders work on Starter. Interrupted renders surface in the Produce panel
-with retry guidance.
+**Memory: resolved.** The instance is upgraded to Standard 2GB and a
+long-form Auto-Produce render completed end to end on it (2026-07-20).
+Narration stays cached per voice+script hash, so retries are free.
+
+**PENDING DEPLOY (do this first next session):** branch
+`claude/verify-long-form-render-5cih00` holds tested, unreleased fixes:
+blur-fill slide layout (whole image visible over a blurred fill, both
+orientations); original video upload at import (streamed, 500MB cap) with
+re-import attaching footage to existing "frame only" items; real muted
+video clips cut into Auto-Produce b-roll (looped to slot, poster-frame
+fallback); HeyGen photo avatars (talking_photos) listed and rendered with
+kind-aware payloads everywhere; persistent avatar-list errors with retry
+in Avatar Studio; doctrine law 17. Deploy = confirm with the user that no
+render is running, then merge that branch into the deploy branch and
+push. After deploy the user must re-import their video files ONCE (their
+2026-07-20 re-import predated the deploy and was skipped as duplicates);
+Library badges flip "frame only" to "video" as footage attaches.
 
 Active user workspace: "Conscious Creator" (application-launch campaign for a
 Feb 8-12 Akumal & Tulum retreat; pillars/series architecture documented in
-conversation and entered by the user).
+conversation and entered by the user). Launch sequence remaining: deploy
+the pending branch, re-import videos, produce the long-form YouTube video
+(landscape, avatar open now that HeyGen API credits are loaded), fill the
+[FILL] facts via the Edit buttons, then day-one publishing (YouTube +
+Website Kit into Lovable + LinkedIn same day, then socials per the rhythm
+grid).
 
 ## Agreed roadmap (in order)
 

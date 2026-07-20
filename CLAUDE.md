@@ -13,7 +13,7 @@ push only when the user is not rendering.
   packages/render/voice/avatar/auth/llms.txt
 - `lib/store.js` — per-workspace JSON stores (`data/workspaces/<id>/`),
   rolling state snapshots, media file storage
-- `lib/engine.js` — generation doctrine (16 laws), master context,
+- `lib/engine.js` — generation doctrine (17 laws), master context,
   per-platform generation, FAQ/citation layer, media AI selection, brief and
   voice-DNA synthesis
 - `lib/platforms.js` — 14 platform specs (fields drive prompts, UI, rubric)
@@ -36,6 +36,12 @@ push only when the user is not rendering.
    blocklisted entities anywhere — including docs, commits, and chat drafts.
 3. Voice DNA uploads are additive (same filename replaces that file only).
 4. Interview hints adapt to declared industry; all questions optional.
+5. Industry respect (doctrine law 17): never say anything negative about any
+   supplier, resort, hotel, cruise line, airline, tour operator, venue, or
+   destination. This applies everywhere: generated content, docs, commits,
+   and chat drafts. Negative source material is omitted or recast as a
+   neutral, unnamed lesson. The creator is a travel industry professional;
+   neutral or positive framing only.
 
 ## Working conventions
 

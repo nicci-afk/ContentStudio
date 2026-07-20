@@ -14,7 +14,7 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles,
+const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace,
   listSnapshots, restoreSnapshot } =
   await import('./lib/store.js');
@@ -184,7 +184,7 @@ app.post('/api/media', wrap(async (req, res) => {
     size: size || 0, w: w || null, h: h || null,
     takenAt: takenAt || null, gps: gps || null,
     alt: null, caption: null, keywords: [], place: null, quality: null, storyIdeas: [],
-    analyzed: false, addedAt: new Date().toISOString(),
+    analyzed: false, hasOriginal: false, addedAt: new Date().toISOString(),
   };
   mediaStore.update((m) => ({ items: [record, ...m.items] }));
   res.json({ item: record });
@@ -194,6 +194,50 @@ app.get('/api/media/:id/thumb', (req, res) => {
   const buf = readMediaFile(req.params.id, 'thumb');
   if (!buf) return res.status(404).end();
   res.type('image/jpeg').send(buf);
+});
+
+// Original video upload: the browser streams the untouched file here after
+// import so Auto-Produce can cut real moving clips into b-roll. Streamed
+// straight to disk (never buffered in memory) with a hard size cap.
+const MAX_ORIGINAL_BYTES = 500 * 1024 * 1024;
+app.post('/api/media/:id/original', (req, res) => {
+  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'not found' });
+  if (item.kind !== 'video') return res.status(400).json({ error: 'originals are only stored for videos' });
+  const declared = Number(req.headers['content-length'] || 0);
+  if (declared > MAX_ORIGINAL_BYTES) {
+    return res.status(413).json({ error: 'video is larger than the 500MB per-file limit' });
+  }
+  const file = mediaPath(item.id, 'original');
+  const partial = `${file}.part`;
+  const out = fs.createWriteStream(partial);
+  let received = 0;
+  let failed = false;
+  const abort = (code, message) => {
+    if (failed) return;
+    failed = true;
+    out.destroy();
+    fs.rm(partial, { force: true }, () => {});
+    req.destroy();
+    if (!res.headersSent) res.status(code).json({ error: message });
+  };
+  req.on('data', (chunk) => {
+    received += chunk.length;
+    if (received > MAX_ORIGINAL_BYTES) abort(413, 'video is larger than the 500MB per-file limit');
+  });
+  req.on('error', () => abort(400, 'upload interrupted'));
+  out.on('error', () => abort(500, 'could not write the video to disk'));
+  out.on('finish', () => {
+    if (failed) return;
+    fs.rename(partial, file, (err) => {
+      if (err) return abort(500, 'could not store the video');
+      mediaStore.update((m) => ({
+        items: m.items.map((i) => (i.id === item.id ? { ...i, hasOriginal: true } : i)),
+      }));
+      res.json({ ok: true, bytes: received });
+    });
+  });
+  req.pipe(out);
 });
 
 app.post('/api/media/:id/analyze', wrap(async (req, res) => {

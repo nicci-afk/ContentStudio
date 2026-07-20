@@ -245,21 +245,29 @@ function videoFrames(file, timeoutMs = 12000) {
 // ---- import + analyze pipeline -------------------------------------------
 
 async function importFiles(files, onStatus, existing = []) {
-  const seen = new Set(existing.map((i) => `${i.name}|${i.size}`));
+  const byKey = new Map(existing.map((i) => [`${i.name}|${i.size}`, i]));
   const fresh = [];
+  const retrofits = [];
   let skipped = 0;
   for (const f of files) {
-    if (seen.has(`${f.name}|${f.size}`)) skipped += 1;
-    else fresh.push(f);
+    const match = byKey.get(`${f.name}|${f.size}`);
+    if (!match) fresh.push(f);
+    // A video imported before full-footage uploads existed only has a
+    // preview frame on the server. Re-importing the same file attaches the
+    // real footage to the existing item instead of skipping it.
+    else if (match.kind === 'video' && !match.hasOriginal && f.type.startsWith('video')) {
+      retrofits.push({ name: f.name, file: f, item: match });
+    } else skipped += 1;
   }
 
   let wake = null;
   try { wake = await navigator.wakeLock?.request('screen'); } catch { /* unsupported */ }
 
+  const total = fresh.length + retrofits.length;
   let done = 0;
   let timedOut = 0;
-  const tick = () => onStatus(
-    `Importing ${done}/${fresh.length}${skipped ? ` · ${skipped} already in library` : ''}…`);
+  const tick = (note) => onStatus(
+    `${note || 'Importing'} ${done}/${total}${skipped ? ` · ${skipped} already in library` : ''}…`);
   tick();
 
   const work = async (file) => {
@@ -278,6 +286,24 @@ async function importFiles(files, onStatus, existing = []) {
       gps: exif.gps || gps || null,
       thumbB64: f.thumbB64, analysisB64: f.analysisB64, renderB64: f.renderB64 || null,
     });
+    if (isVideo) {
+      tick(`Uploading ${file.name} footage,`);
+      try {
+        await api.uploadMediaOriginal(item.id, file);
+        item.hasOriginal = true;
+      } catch (err) {
+        toast(`${file.name}: kept the preview frame only (${err.message}); renders will show a still for this one`, 'err');
+      }
+    }
+    done += 1;
+    tick();
+    return item;
+  };
+
+  const attachOriginal = async ({ name, file, item }) => {
+    tick(`Uploading ${name} footage,`);
+    await api.uploadMediaOriginal(item.id, file);
+    item.hasOriginal = true;
     done += 1;
     tick();
     return item;
@@ -285,17 +311,20 @@ async function importFiles(files, onStatus, existing = []) {
 
   // Photos fan out; videos go single-file — parallel video decode is what
   // stalls phone browsers.
-  const [imageResults, videoResults] = await Promise.all([
+  const [imageResults, videoResults, retrofitResults] = await Promise.all([
     pool(fresh.filter((f) => !f.type.startsWith('video')), 3, work),
     pool(fresh.filter((f) => f.type.startsWith('video')), 1, work),
+    pool(retrofits, 1, attachOriginal),
   ]);
   try { await wake?.release?.(); } catch { /* released with tab */ }
 
-  const results = [...imageResults, ...videoResults];
+  const results = [...imageResults, ...videoResults, ...retrofitResults];
   for (const r of results) {
     if (r?.__error) toast(`${r.__name}: ${r.__error}`, 'err');
   }
-  if (skipped) toast(`${skipped} file(s) already imported — skipped instantly`);
+  const attached = retrofitResults.filter((r) => r && !r.__error).length;
+  if (attached) toast(`${attached} video(s) now carry their full footage; new renders will use real clips`);
+  if (skipped) toast(`${skipped} file(s) already imported, skipped instantly`);
   if (timedOut) toast(`${timedOut} video(s) saved without a preview frame (kept date/GPS; this device couldn't decode them)`, 'err');
   return results.filter((r) => r && !r.__error);
 }
@@ -387,7 +416,12 @@ function mediaCard(item, refresh) {
       onclick: () => { open = !open; drawDetail(); },
     },
       el('img', { class: 'media-thumb', src: `/api/media/${item.id}/thumb`, alt: item.alt || item.name, loading: 'lazy' }),
-      el('span', { class: 'media-kind' }, item.kind === 'video' ? '▶ video' : 'photo'),
+      el('span', {
+        class: 'media-kind',
+        title: item.kind !== 'video' ? '' : (item.hasOriginal
+          ? 'Full footage stored: renders use the real moving clip'
+          : 'Only a preview frame is stored. Re-import this video file and the footage attaches automatically, so renders can use the real clip'),
+      }, item.kind === 'video' ? (item.hasOriginal ? '▶ video' : '▶ frame only') : 'photo'),
       item.analyzed ? el('span', { class: 'media-analyzed' }, '✦') : null),
     el('div', { class: 'media-meta' },
       el('strong', {}, item.caption || item.name),

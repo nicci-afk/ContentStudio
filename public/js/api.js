@@ -28,6 +28,12 @@ export const api = {
 
   media: () => get('/api/media'),
   addMedia: (item) => send('POST', '/api/media', item),
+  uploadMediaOriginal: (id, file) =>
+    fetch(`/api/media/${id}/original`, {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    }).then(j),
   analyzeMedia: (id) => send('POST', `/api/media/${id}/analyze`, {}),
   updateMedia: (id, patch) => send('PATCH', `/api/media/${id}`, patch),
   deleteMedia: (id) => send('DELETE', `/api/media/${id}`),

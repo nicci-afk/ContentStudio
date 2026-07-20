@@ -24,7 +24,8 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, listRenders } = await import('./lib/render.js');
+const { startRender, renderJob, renderFile, listRenders, activeRenderIds } = await import('./lib/render.js');
+const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
@@ -430,6 +431,18 @@ app.get('/api/packages/:id/renders', (req, res) => {
   res.json({ items: listRenders(req.params.id) });
 });
 
+// ---- storage (shared data disk: report, cleanup, render deletion) --------
+
+app.get('/api/storage', (req, res) => res.json(storageReport(activeRenderIds())));
+
+app.post('/api/storage/cleanup', (req, res) => res.json(cleanupStorage(activeRenderIds())));
+
+app.post('/api/storage/renders/delete', (req, res) => {
+  const result = deleteRender(req.body?.workspaceId, req.body?.renderId, activeRenderIds());
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
 // ---- voice (ElevenLabs) --------------------------------------------------
 
 app.get('/api/voice/voices', wrap(async (req, res) => res.json({ voices: await elevenVoices() })));
@@ -466,6 +479,13 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// Renders that died mid-flight (crash or deploy restart) leave their temp
+// folders behind forever; sweep them at boot, when no job can be running.
+const swept = cleanupStorage(new Set());
+if (swept.freedBytes > 0) {
+  console.log(`  storage: swept ${Math.round(swept.freedBytes / 1e6)}MB of stale render temp files (${swept.removedTmp} folder(s), ${swept.removedParts} partial upload(s))`);
+}
 
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {

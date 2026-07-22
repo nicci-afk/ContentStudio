@@ -80,6 +80,35 @@ Feb 8-12 Akumal & Tulum retreat; pillars/series architecture documented in
 conversation and entered by the user). The launch package id is
 0d5825c2e277bfec (the pkg param on the Create view URL).
 
+**Built 2026-07-22 (local, not yet pushed):** Auto-Produce upgrades in
+response to user feedback on repetition and talking-head sections:
+- Footage variety planner (lib/render.js buildFootagePlan): video sources
+  earn slots proportional to their real length (weight = duration/5s, cap
+  6), sources are spread so nothing plays twice in a row, and every
+  reappearance of a clip seeks to a fresh time window instead of replaying
+  its first seconds. Meta now reports clipWindows alongside videoClips.
+- Avatar on-camera sections: parseScriptSections splits the script on
+  [ON CAMERA]/[TALKING HEAD]/[A-ROLL] vs [B-ROLL] cues (bracketed or
+  bare "CUE:" lines). With avatar scope 'sections' (new avatar.scope field;
+  'open' = classic hook-only open, the default), each on-camera section
+  renders as a HeyGen video (submitted up front in parallel, long sections
+  chunked into <=1400-char scenes of one video), b-roll sections each get
+  their own ElevenLabs narration + word-timed burned captions, and all
+  parts concat losslessly (shared encode profile, timescale 12800; re-encode
+  concat as fallback). A failed/timed-out HeyGen section degrades to
+  narrated b-roll instead of sinking the render (avatarFailed in meta); a
+  failed hook open is skipped. meta.avatar now reflects actual success;
+  meta.avatarSections counts on-camera sections. One SRT spans the full
+  timeline (avatar sections estimated, b-roll word-timed). The youtube_long
+  script hint now asks generation for explicit [ON CAMERA]/[B-ROLL: cue]
+  markers; cleanScriptForSpeech strips the new cue lines. UI: avatar toggle
+  is now "Use my avatar", with a scope select defaulting to sections when
+  the script carries on-camera markers; render details line shows
+  "avatar on camera xN" and distinct clip windows.
+- ELEVENLABS_API_URL / HEYGEN_API_URL env overrides let local tests mock
+  both providers end to end (mock rig + labeled test footage lives in the
+  session scratchpad, not the repo).
+
 **Deployed 2026-07-20, second push:** render details line shows the real
 clip count ("N real clips"); storage maintenance endpoints: GET
 /api/storage (disk totals plus per-workspace media/footage/renders/temp

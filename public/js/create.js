@@ -270,7 +270,9 @@ function producePanel(pkg, platformId) {
   const panel = el('div', { class: 'produce-panel' });
   const defaultOrientation = platformId === 'youtube_long' ? 'landscape' : 'portrait';
   const savedDelivery = (() => { try { return localStorage.getItem('cs_delivery'); } catch { return null; } })();
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
+  const scriptText = String(pkg.platforms?.[platformId]?.fields?.script || '');
+  const hasOnCamera = /\[[^\]]*\b(?:talking[ -]?head|on[ -]?camera|to[ -]?camera|a[ -]?roll)\b[^\]]*\]|^\s*(?:TALKING[ -]?HEAD|ON[ -]?CAMERA|A[ -]?ROLL)\s*[:\-]/im.test(scriptText);
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: hasOnCamera ? 'sections' : 'open', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -313,9 +315,13 @@ function producePanel(pkg, platformId) {
               a.kind === 'talking_photo' ? `${a.name} (your photo avatar)` : a.name)));
           const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; } },
             ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
+          const scopeSel = el('select', { class: 'input select', title: 'Where your avatar appears in the video', onchange: (ev) => { state.avatarScope = ev.target.value; } },
+            el('option', { value: 'sections', selected: state.avatarScope === 'sections' },
+              hasOnCamera ? 'Avatar on every [ON CAMERA] section' : 'Avatar on on-camera sections (none marked in this script)'),
+            el('option', { value: 'open', selected: state.avatarScope === 'open' }, 'Avatar on the open only'));
           pickAvatar(avatars[0]?.id || null);
           state.heygenVoiceId = voices[0]?.id || null;
-          avatarWrap.append(aSel, vSel);
+          avatarWrap.append(aSel, vSel, scopeSel);
         } catch (err) {
           toast(`Avatar unavailable: ${err.message}`, 'err');
           state.useAvatar = false;
@@ -324,7 +330,7 @@ function producePanel(pkg, platformId) {
         }
       }
     },
-  }, '🧑‍💻 Open with my avatar (HeyGen)');
+  }, '🧑‍💻 Use my avatar (HeyGen)');
 
   const drawRenders = async () => {
     try {
@@ -350,7 +356,7 @@ function producePanel(pkg, platformId) {
                 el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
               ];
             })(),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}` : r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
       }));
     } catch { /* list is best-effort */ }
   };
@@ -363,7 +369,7 @@ function producePanel(pkg, platformId) {
         voiceId: state.voiceId,
         orientation: state.orientation,
         delivery: state.delivery,
-        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId } : null,
+        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope } : null,
       });
       while (true) {
         await new Promise((r) => setTimeout(r, 4000));

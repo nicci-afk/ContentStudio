@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 
@@ -49,8 +50,18 @@ const wrap = (fn) => (req, res) => {
 
 // ---- system --------------------------------------------------------------
 
+// Every changed surface sits behind auth, so health carries the running
+// commit to make deploys externally verifiable. Render injects
+// RENDER_GIT_COMMIT into the runtime; a local checkout asks git instead.
+const BUILD = (() => {
+  const sha = process.env.RENDER_GIT_COMMIT
+    || (() => { try { return execSync('git rev-parse HEAD', { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString(); } catch { return ''; } })();
+  return sha.trim().slice(0, 7) || 'unknown';
+})();
+const BOOTED_AT = new Date().toISOString();
+
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, version: '1.0.0', providers: providerStatus() });
+  res.json({ ok: true, version: '1.0.0', build: BUILD, bootedAt: BOOTED_AT, providers: providerStatus() });
 });
 
 app.get('/api/platforms', (req, res) => res.json({ platforms: platformList() }));
@@ -491,6 +502,6 @@ if (swept.freedBytes > 0) {
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {
   const s = providerStatus();
-  console.log(`ContentStudio running → http://localhost:${port}`);
+  console.log(`ContentStudio running → http://localhost:${port} (build ${BUILD})`);
   console.log(`  Claude: ${s.anthropic ? `ready (${s.model})` : 'no key — template mode'} | ElevenLabs: ${s.elevenlabs ? 'ready' : 'no key'} | HeyGen: ${s.heygen ? 'ready' : 'no key'}`);
 });

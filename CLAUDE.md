@@ -156,27 +156,60 @@ sessions started after the change. Pickup order:
    Website Kit into Lovable + LinkedIn same day, then socials per the
    rhythm grid).
 
-**Auth state (2026-07-22):** magic links are OFF on production. POST
-/auth/magic/request returns 424 and /auth/config reports magic:false,
-password:true, meaning the Render env is missing MAGIC_EMAILS and/or an
-email sender (RESEND_API_KEY, or SMTP_HOST+SMTP_USER+SMTP_PASS). The user
-plans to fix the env vars (each env save restarts the service). Until
-then, sign in with the studio password (Basic auth works on /api). The
-launch checklist (storage report, hasOriginal audit, long-form render,
-FILL facts, rescore, day-one publishing) is parked on sign-in. When the
-long-form render runs with the new build, expect meta.avatarSections >= 1
-if the script carries on-camera markers, plus clipWindows > videoClips.
+**Auth state (2026-07-22, rechecked same day):** magic links are OFF on
+production. POST /auth/magic/request returns 424 and /auth/config reports
+magic:false, password:true, meaning the Render env is missing MAGIC_EMAILS
+and/or an email sender (RESEND_API_KEY, or SMTP_HOST+SMTP_USER+SMTP_PASS).
+The user plans to fix the env vars (each env save restarts the service).
+Until then, sign in with the studio password (Basic auth works on /api);
+the user chose that route but the password itself has not been shared with
+a session yet, so ask for it or for the env fix. The launch checklist
+(storage report, hasOriginal audit, long-form render, FILL facts, rescore,
+day-one publishing) is parked on sign-in. When the long-form render runs
+with the new build, expect meta.avatarSections >= 1 if the script carries
+on-camera markers, plus clipWindows > videoClips.
+
+**Built 2026-07-22, third session (on the dev branch, tested locally end
+to end against a rebuilt mock rig, NOT yet deployed):** upgrades 1 and 6
+from the list below, so the launch video ships with real chapters:
+- True chapters from the render (lib/render.js): the finalize pass records
+  every part's exact start/end in meta.sections; parts fold into chapters
+  (nothing under 10s, first pinned to 00:00, fmt 00:00 or h:mm:ss); titles
+  come from Claude (titleChapters, doctrine-aware: no em or en dashes,
+  blocklist filtered, industry respect) with first-words fallback when no
+  key or on error. Job and meta carry sections, chapters, chaptersApplied.
+- Package auto-patch after a successful render: chapters field replaced
+  and the description's first timestamp block swapped in place (appended
+  under "Chapters:" when the draft had none) when the render yields 3+
+  chapters (YouTube's minimum for markers); pkg.renders[platformId] stores
+  renderId, duration, orientation, sections, chapters; jsonld and
+  visibility rebuild automatically.
+- VideoObject JSON-LD (lib/visibility.js): duration (ISO 8601), hasPart
+  Clip entries with real startOffset/endOffset, and, once
+  pkg.publishedUrls.youtube_long exists (the upgrade-3 registry will fill
+  it), url, per-Clip deep links, and a SeekToAction potentialAction.
+- /api/health now returns build (RENDER_GIT_COMMIT on Render, git
+  rev-parse locally) and bootedAt, so deploys are externally verifiable;
+  boot log prints the build too.
+- ANTHROPIC_API_URL env override added alongside the ElevenLabs/HeyGen
+  ones; the mock rig (scratchpad, not the repo) now mocks all three
+  providers plus labeled test footage, and a full sections-mode render
+  passed: 4 sections, 4 true chapters, chaptersApplied, avatar x2, real
+  clip windows, captions, correct description splice, correct JSON-LD.
+- UI (create.js): after a render that auto-filled chapters the package
+  reloads in place; the render details line shows "N chapters auto-filled".
 
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:
 
-1. **True chapters from the render.** Section parts now have exact start
-   offsets; emit real 00:00 chapter lines from finalParts (titles from
-   section content), auto-patch the package chapters/description fields
-   after a successful render, and add hasPart Clip entries (startOffset/
-   endOffset) plus duration/SeekToAction to the VideoObject JSON-LD.
-   Chapters are jump-to answers in Google and assistants.
+1. **True chapters from the render. DONE (built third session 2026-07-22,
+   awaiting deploy).** Section parts now have exact start offsets; emit
+   real 00:00 chapter lines from finalParts (titles from section content),
+   auto-patch the package chapters/description fields after a successful
+   render, and add hasPart Clip entries (startOffset/endOffset) plus
+   duration/SeekToAction to the VideoObject JSON-LD. Chapters are jump-to
+   answers in Google and assistants.
 2. **Event + TravelAgency schema.** The launch is literally an event
    (Feb 8-12 retreat, Akumal & Tulum). Add per-package offer/event fields
    (dates, Place with geo, price) emitting Event JSON-LD in the Website
@@ -198,9 +231,10 @@ Highest leverage first; 1-3 build directly on the section-based renderer:
    Person JSON-LD with sameAs to every canonical profile, the definition
    sentence, NAP identical to GBP/Bing. Add a rubric check for
    person.sameAs >= 3.
-6. **Ops:** stamp a build id/version into /api/health at deploy so
-   deploys are externally verifiable (current deploys are invisible from
-   outside because all changed surfaces sit behind auth).
+6. **Ops: DONE (built third session 2026-07-22, awaiting deploy).** Stamp
+   a build id/version into /api/health at deploy so deploys are externally
+   verifiable (current deploys are invisible from outside because all
+   changed surfaces sit behind auth).
 
 ## Agreed roadmap (in order)
 

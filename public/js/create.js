@@ -245,7 +245,7 @@ function renderPackage(pkg, onDelete) {
           onclick: () => { sessionStorage.setItem('cs-script', script); location.hash = '#/avatar-studio'; },
         }, '🧑‍💻 Film with Avatar')));
     }
-    if (spec?.group === 'video') body.append(producePanel(pkg, active));
+    if (spec?.group === 'video') body.append(producePanel(pkg, active, () => { drawTabs(); drawBody(); }));
   };
 
   drawTabs();
@@ -266,7 +266,7 @@ function renderPackage(pkg, onDelete) {
     tabRow, body);
 }
 
-function producePanel(pkg, platformId) {
+function producePanel(pkg, platformId, onPackageUpdated) {
   const panel = el('div', { class: 'produce-panel' });
   const defaultOrientation = platformId === 'youtube_long' ? 'landscape' : 'portrait';
   const savedDelivery = (() => { try { return localStorage.getItem('cs_delivery'); } catch { return null; } })();
@@ -356,7 +356,7 @@ function producePanel(pkg, platformId) {
                 el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
               ];
             })(),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}` : r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}` : r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
       }));
     } catch { /* list is best-effort */ }
   };
@@ -376,6 +376,17 @@ function producePanel(pkg, platformId) {
         const job = await api.renderStatus(renderId);
         if (job.status === 'done') {
           result.replaceChildren();
+          if (job.chaptersApplied) {
+            // The render wrote real chapter lines into the package fields;
+            // reload so the chapters/description editors show the truth.
+            try {
+              const { package: updated } = await api.pkg(pkg.id);
+              Object.assign(pkg, updated);
+              toast('Video rendered · real chapters written into the package');
+              onPackageUpdated?.();
+              return;
+            } catch { /* the render row still shows the chapters */ }
+          }
           toast('Video rendered');
           await drawRenders();
           return;

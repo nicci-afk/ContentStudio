@@ -287,8 +287,8 @@ and full carousel + x_thread content: deposit $1,000 non-refundable,
 Street, Edwardsville, IL 62025, hours by appointment plus on call 24/7
 in destination. Profile location rephrased to "Akumal and Tulum, Mexico"
 (the old "Akumal/ Tulum" slash never matched copy, failing the geo
-check). Remaining gaps: the user's phone number is incomplete (618-955-
-XXXX placeholder in bing.description; ask for the last four digits),
+check). Phone 618-954-7979 landed in bing.description the next turn; zero
+[FILL] placeholders remain in any platform field. Remaining gaps:
 pkg.queryMap is empty and pkg.faq answers still carry [FILL] (both need
 a citation-layer regenerate endpoint, the PATCH route only reaches
 platform fields; build it in the next code pass), and jsonld hasPart

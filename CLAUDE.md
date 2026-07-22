@@ -199,6 +199,73 @@ from the list below, so the launch video ships with real chapters:
 - UI (create.js): after a render that auto-filled chapters the package
   reloads in place; the render details line shows "N chapters auto-filled".
 
+**Deployed 2026-07-22 evening (35bd7ae) and launch progress:** the block
+above went live (build verified externally via the new /api/health build
+field). Signed into production with the studio password (Basic auth; the
+password lives in this conversation only, never in the repo). Storage
+healthy (7.8GB free), cleanup found nothing stale. Media audit: launch
+package media all carry originals; 17 unique video files account-wide
+still lack originals (list in session scratchpad prod-media.json). The
+launch script got three [ON CAMERA] markers via field edit (open, grocery
+bagger story, pricing answer), copy untouched. Launch render v1 completed:
+3416bf717fccf3bf, 221s, avatar on camera x3 (Nicci avatar, full frame),
+6 true chapters auto-filled into the package, captions, 5 clips over 11
+distinct windows. Chapter titling by Claude failed twice in production
+(fallback first-words titles used; anthropic itself healthy, cause not yet
+identified, diagnostics added, see below).
+
+**HeyGen avatar findings (2026-07-22):** HeyGen's v2 generate now rejects
+the legacy "Cynthia Grotefendt" avatar ("does not support unlimited mode,
+use Avatar IV or V"), which had been silently degrading every avatar
+render all day (fail-safe worked, avatar:false in meta). The account's
+"Nicci" avatar (6c15153defb24af3a9a6190ca1e46cd9) is the same person on a
+newer generation and renders fine. The plain "Cynthia" avatar is a
+different person (bearded man), never use it without asking. The user's
+PREFERRED avatar is "Sofia", which the v2 list does not return (newer
+generation); find it via the v3 looks list after deploy and verify the
+preview face before rendering with it.
+
+**Voice preference (2026-07-22, from the user):** the user's ElevenLabs
+voice is 8TIjMlEyk1P66yOtXPHa (professional clone, listed as "Nicci",
+category professional). The raw voice reads fast and aggressive to her;
+she wants calm and welcoming. Always render with delivery "calm" (which
+now also slows narration to 0.93 speed) and that voice id. The instant
+clone COsb5gD7rHYmEEDkf7DB was used for launch render v1.
+
+**Built 2026-07-22, fourth session (dev branch, tested locally end to end
+against the extended mock rig, NOT yet deployed):**
+- HeyGen v3 migration (lib/providers.js): avatars list via GET
+  /v3/avatars/looks (private looks first, one page of public presets, v2
+  list as fallback), generation via POST /v3/videos (one script per video;
+  long sections submit as consecutive chunk videos and concat after
+  download), status via GET /v3/videos/:id. v2 dies 2026-10-31.
+- Avatar cutout style (lib/render.js buildCutoutPart): avatar.style
+  'cutout' requests HeyGen's transparent webm (VP9 alpha, aspect auto,
+  1080p), composites the creator over a muted footage bed built from the
+  same variety plan as b-roll (landscape: person full height anchored
+  right of center; portrait: centered), audio from the avatar video,
+  estimated caption cues burned so captions never drop out on camera.
+  Style select in the produce panel defaults to cutout; meta and details
+  line carry avatarStyle. Full-frame stays available ('full').
+- Narration speed: DELIVERY presets gained speed (calm 0.93, energetic
+  1.05) passed to ElevenLabs voice_settings.speed and folded into the
+  narration cache key for non-balanced styles.
+- Chapter titling hardened: object-wrapped arrays accepted, per-index
+  fallback on short lists, and meta now records chapterTitles
+  (claude/fallback) plus chapterTitleError so the next failure explains
+  itself.
+- UI: produce panel prefers the professional voice clone as default and
+  labels it "your voice"; burnCaptions factored out and shared.
+- Mock rig (scratchpad rig/): v3 endpoints, Sofia private look, alpha
+  webm generation; full cutout sections render passed locally (person
+  over footage bed verified frame by frame, chapters applied).
+
+**Next after deploy:** find Sofia via /api/avatar/avatars (v3), verify
+preview face matches the user, then re-render the launch video: package
+0d5825c2e277bfec, youtube_long, landscape, voice 8TIjMlEyk1P66yOtXPHa,
+delivery calm, avatar Sofia, scope sections, style cutout. Then FILL
+facts, rescore, day-one publishing, then upgrades 2 to 5.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

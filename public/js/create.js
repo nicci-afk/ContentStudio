@@ -272,7 +272,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const savedDelivery = (() => { try { return localStorage.getItem('cs_delivery'); } catch { return null; } })();
   const scriptText = String(pkg.platforms?.[platformId]?.fields?.script || '');
   const hasOnCamera = /\[[^\]]*\b(?:talking[ -]?head|on[ -]?camera|to[ -]?camera|a[ -]?roll)\b[^\]]*\]|^\s*(?:TALKING[ -]?HEAD|ON[ -]?CAMERA|A[ -]?ROLL)\s*[:\-]/im.test(scriptText);
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: hasOnCamera ? 'sections' : 'open', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: hasOnCamera ? 'sections' : 'open', avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -291,8 +291,11 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const renderList = el('div', {});
 
   api.voices().then(({ voices }) => {
-    voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name}${v.category === 'cloned' ? ' · your clone' : ''}`)));
-    state.voiceId = voices.find((v) => v.category === 'cloned')?.id || voices[0]?.id || null;
+    const own = (v) => v.category === 'professional' || v.category === 'cloned';
+    voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name}${own(v) ? ' · your voice' : ''}`)));
+    // The professional clone reads truest; an instant clone is the backup.
+    state.voiceId = voices.find((v) => v.category === 'professional')?.id
+      || voices.find((v) => v.category === 'cloned')?.id || voices[0]?.id || null;
     if (state.voiceId) voiceSelect.value = state.voiceId;
   }).catch(() => {});
 
@@ -319,9 +322,12 @@ function producePanel(pkg, platformId, onPackageUpdated) {
             el('option', { value: 'sections', selected: state.avatarScope === 'sections' },
               hasOnCamera ? 'Avatar on every [ON CAMERA] section' : 'Avatar on on-camera sections (none marked in this script)'),
             el('option', { value: 'open', selected: state.avatarScope === 'open' }, 'Avatar on the open only'));
+          const styleSel = el('select', { class: 'input select', title: 'How your avatar appears on screen', onchange: (ev) => { state.avatarStyle = ev.target.value; } },
+            el('option', { value: 'cutout', selected: state.avatarStyle === 'cutout' }, 'Cut out over your footage (green screen look)'),
+            el('option', { value: 'full', selected: state.avatarStyle === 'full' }, 'Full frame'));
           pickAvatar(avatars[0]?.id || null);
           state.heygenVoiceId = voices[0]?.id || null;
-          avatarWrap.append(aSel, vSel, scopeSel);
+          avatarWrap.append(aSel, vSel, scopeSel, styleSel);
         } catch (err) {
           toast(`Avatar unavailable: ${err.message}`, 'err');
           state.useAvatar = false;
@@ -356,7 +362,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
                 el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
               ];
             })(),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}` : r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
       }));
     } catch { /* list is best-effort */ }
   };
@@ -369,7 +375,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
         voiceId: state.voiceId,
         orientation: state.orientation,
         delivery: state.delivery,
-        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope } : null,
+        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope, style: state.avatarStyle } : null,
       });
       while (true) {
         await new Promise((r) => setTimeout(r, 4000));

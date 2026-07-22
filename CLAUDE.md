@@ -156,18 +156,23 @@ sessions started after the change. Pickup order:
    Website Kit into Lovable + LinkedIn same day, then socials per the
    rhythm grid).
 
-**Auth state (2026-07-22, rechecked same day):** magic links are OFF on
-production. POST /auth/magic/request returns 424 and /auth/config reports
-magic:false, password:true, meaning the Render env is missing MAGIC_EMAILS
-and/or an email sender (RESEND_API_KEY, or SMTP_HOST+SMTP_USER+SMTP_PASS).
-The user plans to fix the env vars (each env save restarts the service).
-Until then, sign in with the studio password (Basic auth works on /api);
-the user chose that route but the password itself has not been shared with
-a session yet, so ask for it or for the env fix. The launch checklist
-(storage report, hasOriginal audit, long-form render, FILL facts, rescore,
-day-one publishing) is parked on sign-in. When the long-form render runs
-with the new build, expect meta.avatarSections >= 1 if the script carries
-on-camera markers, plus clipWindows > videoClips.
+**Auth state (2026-07-22 night): magic links are ON.** The user added
+MAGIC_EMAILS (nicci@travelghr.com,whoskha@gmail.com) and RESEND_API_KEY
+to the Render env; /auth/config reports magic:true, password:true.
+Delivery verified end to end for nicci@travelghr.com (link arrived in
+seconds from onboarding@resend.dev and the flow is the button in her
+inbox). whoskha@gmail.com is still blocked by Resend's testing rule
+(403: only the account owner's address until a domain is verified);
+to unblock, verify travelghr.com under Resend Domains, then add
+MAGIC_FROM=ContentStudio <signin@travelghr.com> to the Render env.
+Password sign-in and Basic auth on /api both still work.
+
+**Chapter titling root cause (2026-07-22 night, from the new
+chapterTitleError diagnostic):** anthropic 400, "temperature is
+deprecated for this model" (claude-sonnet-5 rejects temperature 0.4).
+Fix queued for the next code pass: drop the temperature override in
+titleChapters (and prefer omitting temperature in providers.claude
+whenever it equals the default).
 
 **Built 2026-07-22, third session (on the dev branch, tested locally end
 to end against a rebuilt mock rig, NOT yet deployed):** upgrades 1 and 6

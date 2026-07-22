@@ -394,7 +394,7 @@ app.delete('/api/packages/:id', (req, res) => {
 // ---- auto-produce (finished video rendering) -----------------------------
 
 app.post('/api/render', wrap(async (req, res) => {
-  const { packageId, platformId, voiceId, orientation, avatar } = req.body;
+  const { packageId, platformId, voiceId, orientation, avatar, delivery } = req.body;
   const pkg = packageStore.get().items.find((p) => p.id === packageId);
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   const fields = pkg.platforms?.[platformId]?.fields;
@@ -405,6 +405,7 @@ app.post('/api/render', wrap(async (req, res) => {
     pkg, profile: stateStore.get().profile, platformId, script, hookText, voiceId: voiceId || null,
     orientation: orientation || (platformId === 'youtube_long' ? 'landscape' : 'portrait'),
     avatar: avatar || null,
+    delivery: delivery || null,
   });
   res.json({ renderId });
 }));

@@ -269,7 +269,8 @@ function renderPackage(pkg, onDelete) {
 function producePanel(pkg, platformId) {
   const panel = el('div', { class: 'produce-panel' });
   const defaultOrientation = platformId === 'youtube_long' ? 'landscape' : 'portrait';
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, orientation: defaultOrientation };
+  const savedDelivery = (() => { try { return localStorage.getItem('cs_delivery'); } catch { return null; } })();
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -277,6 +278,13 @@ function producePanel(pkg, platformId) {
   const orientationSelect = el('select', { class: 'input select', onchange: (e) => { state.orientation = e.target.value; } },
     el('option', { value: 'portrait', selected: defaultOrientation === 'portrait' }, 'Portrait 9:16'),
     el('option', { value: 'landscape', selected: defaultOrientation === 'landscape' }, 'Landscape 16:9'));
+  const deliverySelect = el('select', { class: 'input select', title: 'Narration delivery style', onchange: (e) => {
+    state.delivery = e.target.value;
+    try { localStorage.setItem('cs_delivery', state.delivery); } catch { /* remember is best-effort */ }
+  } },
+    el('option', { value: 'calm', selected: state.delivery === 'calm' }, 'Warm & calm delivery'),
+    el('option', { value: 'balanced', selected: state.delivery === 'balanced' }, 'Balanced delivery'),
+    el('option', { value: 'energetic', selected: state.delivery === 'energetic' }, 'Energetic delivery'));
   const result = el('div', {});
   const renderList = el('div', {});
 
@@ -342,7 +350,7 @@ function producePanel(pkg, platformId) {
                 el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
               ];
             })(),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
       }));
     } catch { /* list is best-effort */ }
   };
@@ -354,6 +362,7 @@ function producePanel(pkg, platformId) {
         packageId: pkg.id, platformId,
         voiceId: state.voiceId,
         orientation: state.orientation,
+        delivery: state.delivery,
         avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId } : null,
       });
       while (true) {
@@ -382,7 +391,7 @@ function producePanel(pkg, platformId) {
       el('span', { class: 'field-label' }, '🎬 Auto-produce this video'),
       el('span', { class: 'muted' }, 'Your library imagery + your cloned voice, rendered to a finished MP4')),
     el('div', { class: 'row gap wrap' },
-      voiceSelect, orientationSelect, avatarToggle),
+      voiceSelect, deliverySelect, orientationSelect, avatarToggle),
     avatarWrap,
     el('button', { class: 'btn btn-primary', onclick: produce }, '🎬 Produce video'),
     result, renderList,

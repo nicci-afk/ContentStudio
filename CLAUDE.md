@@ -2,10 +2,17 @@
 
 Standalone AI-visibility content engine: Node/Express API + vanilla ES-module
 frontend, no build step. Deployed on Render (service `contentstudio`,
-`contentstudio-zc9j.onrender.com`) from branch
-`claude/content-studio-ai-visibility-shlgxc`. **Every push auto-deploys and
-restarts the server, which kills in-flight video renders** — batch changes and
-push only when the user is not rendering.
+`contentstudio-zc9j.onrender.com`). **The exact tracked deploy branch is
+unconfirmed**: production picked up commit 5cbb86a only after it was pushed
+to BOTH `claude/content-studio-ai-visibility-shlgxc` and
+`claude/conscious-creator-launch-140huq` (2026-07-22); check the Render
+dashboard Settings > Build & Deploy for the true branch, or push the same
+commit to both. **Every deploy restarts the server, which kills in-flight
+video renders and media uploads** — batch changes and push only when the
+user is not rendering or importing. To verify a deploy landed, fetch a
+static file WITH a signed-in cookie: unauthenticated GETs of /js/* return
+a redirect to /login, which makes naive marker checks report stale code
+forever.
 
 ## Architecture
 
@@ -90,40 +97,50 @@ deletes orphaned render temp folders at startup (logs "storage: swept
 ..."); startRender refuses with a clear message when the data disk has
 under 1536MB free.
 
-**Launch handoff (2026-07-20).** The user re-imported footage, then the
-first long-form Auto-Produce attempt failed with ENOSPC: the data disk
-filled (footage originals plus orphaned render temp folders from earlier
-interrupted renders). The storage tools above shipped in response; their
-boot sweep freed the orphaned temp space automatically at deploy. That
-session's egress allowlist blocked contentstudio-zc9j.onrender.com; the
-user added the domain to the environment allowlist, which applies to
-sessions started after the change. Pickup order:
-1. Sign in to production from the session: POST /auth/magic/request with
-   {"email":"nicci@travelghr.com"}, read the one-time link from the
-   user's connected Gmail (subject "Your ContentStudio sign-in link",
-   expires in 15 minutes), GET it with a cookie jar; the cs_session
-   cookie lasts 30 days. Always confirm with the user before any push to
-   the deploy branch; every push restarts the server and kills renders
-   and uploads in flight.
-2. GET /api/storage: want 4-5GB free before the long-form render. POST
-   /api/storage/cleanup, and with the user's OK delete old renders via
-   /api/storage/renders/delete. If still tight, the user expands the
-   disk in the Render dashboard (disks only grow; resizing restarts the
-   service).
-3. GET /api/media: every video item must show hasOriginal true. Any
-   still false likely failed during the disk-full window; the user
-   re-imports just those files (attach matches exact file name + size).
-4. Produce the long-form YouTube video: UI Create view, or POST
-   /api/render with packageId, platformId "youtube_long", orientation
-   "landscape", the user's cloned ElevenLabs voice ("Nicci · your
-   clone"), avatar open enabled (avatar "Cynthia Grotefendt", HeyGen
-   voice "Smalls - Voice 1"). Poll GET /api/render/:id (10-20 min);
-   verify the finished meta shows videoClips > 0, captions true, avatar
-   true, and spot-check the MP4 (blur-fill layout, burned captions).
-5. Then: fill the [FILL] facts via the Edit buttons across the package,
-   re-check the visibility score, then day-one publishing (YouTube +
-   Website Kit into Lovable + LinkedIn same day, then socials per the
-   rhythm grid).
+**Launch video shipped (2026-07-22).** Render b579c0cf9b8c9523 (done,
+281s, landscape 1080p, captions, 5 real clips, balanced delivery) is the
+publish candidate: corrected script with real facts spoken and captioned
+(seat pricing $2,200 quad / $2,450 triple / $2,800 double / $3,300
+single, all inclusive; applications at consciouscreator.app, capped at
+25 now, expanding to 50 next week). Package visibility 91 AI-Dominant.
+Working setup that produced it: narration voice ElevenLabs "Nicci"
+professional clone 8TIjMlEyk1P66yOtXPHa; avatar open "Sofia luxury
+jetsetter with adorable companion" 52554ad24c6d4e9f92b9ada66df366d5
+(kind avatar) speaking HeyGen-linked voice "Nicci - Voice 1"
+dDFO3I2QaLuryXEunPHM. The "Cynthia Grotefendt" photo-derived avatar is
+REJECTED by HeyGen v2 generate ("does not support unlimited mode; use
+Avatar IV or Avatar V"); newer gallery avatars do not appear in the
+legacy /v2/avatars list but their IDs render fine if the user copies
+them from the HeyGen web app. HeyGen v2 endpoints are legacy and shut
+off 2026-10-31; migrating providers.js to POST /v3/videos is now a
+roadmap item.
+
+**Delivery presets (deployed 2026-07-22, commit 5cbb86a).** Auto-Produce
+panel has a delivery selector (Warm & calm / Balanced / Energetic)
+mapping to ElevenLabs stability/similarity and HeyGen speech speed;
+choice persists in localStorage (default calm). The user A/B tested and
+prefers Balanced (the original settings); consider flipping the default.
+Narration cache keys include the style except balanced, which keeps
+legacy keys.
+
+**Auth state.** Magic links are NOT configured on production (missing
+MAGIC_EMAILS and RESEND_API_KEY/SMTP_* env vars); /auth/magic/request
+returns 424. Sign in with POST /auth/password {password} using the
+studio password (ask the user), cookie jar on cs_session, 30 days.
+Always confirm with the user before any deploy; deploys kill renders
+and uploads in flight.
+
+**Still open for launch:**
+1. User re-imports 48 footage files (56 of 112 library videos have
+   hasOriginal false after the ENOSPC window; list in the session's
+   footage-to-reimport.txt, media items attach by exact file name +
+   size). Frame-only items fall back to stills in renders.
+2. ~33 [FILL] placeholders remain on other platforms (instagram_carousel
+   and x_thread are entirely ungenerated; FAQ answers, newsletter, Bing
+   business address need the user's facts).
+3. Day-one publishing: YouTube upload (MP4 + SRT from render
+   b579c0cf9b8c9523) + Website Kit into Lovable + LinkedIn same day,
+   then socials per the rhythm grid.
 
 ## Agreed roadmap (in order)
 
@@ -133,7 +150,10 @@ sessions started after the change. Pickup order:
    creators/ads for a topic and emits a packaging brief before generation
 3. **YouTube retention analyzer** — read audience-retention graphs, flag
    drop-offs, suggest fixes per episode
-4. **Multi-tenant SaaS phase** — accounts, encrypted per-user provider keys,
+4. **HeyGen v3 migration** — providers.js still calls legacy v2 endpoints,
+   which HeyGen removes 2026-10-31; move generate/status to POST /v3/videos
+   and list newer gallery avatars
+5. **Multi-tenant SaaS phase** — accounts, encrypted per-user provider keys,
    Postgres, billing (only after the content engine is validated)
 
 ## Docs

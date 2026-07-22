@@ -232,8 +232,9 @@ she wants calm and welcoming. Always render with delivery "calm" (which
 now also slows narration to 0.93 speed) and that voice id. The instant
 clone COsb5gD7rHYmEEDkf7DB was used for launch render v1.
 
-**Built 2026-07-22, fourth session (dev branch, tested locally end to end
-against the extended mock rig, NOT yet deployed):**
+**Deployed 2026-07-22 evening, second and third pushes (891a861, then
+cf001ee for avatar group labels), built fourth session and verified
+locally against the extended mock rig first:**
 - HeyGen v3 migration (lib/providers.js): avatars list via GET
   /v3/avatars/looks (private looks first, one page of public presets, v2
   list as fallback), generation via POST /v3/videos (one script per video;
@@ -260,11 +261,30 @@ against the extended mock rig, NOT yet deployed):**
   webm generation; full cutout sections render passed locally (person
   over footage bed verified frame by frame, chapters applied).
 
-**Next after deploy:** find Sofia via /api/avatar/avatars (v3), verify
-preview face matches the user, then re-render the launch video: package
-0d5825c2e277bfec, youtube_long, landscape, voice 8TIjMlEyk1P66yOtXPHa,
-delivery calm, avatar Sofia, scope sections, style cutout. Then FILL
-facts, rescore, day-one publishing, then upgrades 2 to 5.
+**LAUNCH RENDER DONE (2026-07-22, render d7f21fa521b14403):** 243s,
+avatar cut out on camera x3 (Sofia group, look "The Clipboard Bearer",
+id fde2b14cade8433fbb087d2a217e8e45, kind talking_photo), voice
+8TIjMlEyk1P66yOtXPHa, delivery calm, captions, 5 real clips over 13
+windows, 6 true chapters auto-filled and then hand-polished via field
+edit (question form, real timestamps 00:00 / 00:27 / 02:01 / 02:46 /
+02:56 / 03:37). Frames verified: clean alpha edges over real footage.
+Score 91 AI-Dominant. The Sofia group has 18 looks; most hold a
+champagne flute or are stylized posters, Clipboard Bearer is the clean
+presenter. The earlier full-frame cut (3416bf717fccf3bf, Nicci avatar)
+stays as fallback. Claude chapter titling failed a third time (fallback
+titles were auto-filled, then hand-polished); the failure reason is now
+recorded in the render meta on disk but the live job object hides it
+until a restart, so after the next deploy or env-save restart, GET
+/api/render/d7f21fa521b14403 and read chapterTitleError. Known small
+gap: jsonld hasPart Clip names still carry the fallback titles from
+pkg.renders (sync them from the chapters field in a future pass).
+
+**Still parked on the user:** magic-link env vars (MAGIC_EMAILS=
+nicci@travelghr.com,whoskha@gmail.com plus RESEND_API_KEY or SMTP trio;
+safe to save now, nothing rendering), the FILL facts only she knows
+(deposit amount, exact spots remaining, business address, phone, and
+hours for Bing), then day-one publishing (YouTube upload, Website Kit
+into Lovable, LinkedIn same day) whose live URLs feed upgrade 3.
 
 ## Recommended next for AI visibility (2026-07-22 assessment)
 

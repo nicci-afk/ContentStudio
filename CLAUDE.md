@@ -279,12 +279,28 @@ until a restart, so after the next deploy or env-save restart, GET
 gap: jsonld hasPart Clip names still carry the fallback titles from
 pkg.renders (sync them from the chapters field in a future pass).
 
+**FILL facts applied (2026-07-22 night), score 96 AI-Dominant:** the
+user supplied the launch facts and 16 field edits landed them across
+linkedin, gbp, bing, newsletter, shorts/reel production notes, todo,
+and full carousel + x_thread content: deposit $1,000 non-refundable,
+25 advisor seats this round expanding to 50, storefront 1012 North Main
+Street, Edwardsville, IL 62025, hours by appointment plus on call 24/7
+in destination. Profile location rephrased to "Akumal and Tulum, Mexico"
+(the old "Akumal/ Tulum" slash never matched copy, failing the geo
+check). Remaining gaps: the user's phone number is incomplete (618-955-
+XXXX placeholder in bing.description; ask for the last four digits),
+pkg.queryMap is empty and pkg.faq answers still carry [FILL] (both need
+a citation-layer regenerate endpoint, the PATCH route only reaches
+platform fields; build it in the next code pass), and jsonld hasPart
+Clip names still carry fallback titles.
+
 **Still parked on the user:** magic-link env vars (MAGIC_EMAILS=
 nicci@travelghr.com,whoskha@gmail.com plus RESEND_API_KEY or SMTP trio;
-safe to save now, nothing rendering), the FILL facts only she knows
-(deposit amount, exact spots remaining, business address, phone, and
-hours for Bing), then day-one publishing (YouTube upload, Website Kit
-into Lovable, LinkedIn same day) whose live URLs feed upgrade 3.
+safe to save now, nothing rendering; password auth works meanwhile),
+the last four phone digits, then day-one publishing (YouTube upload,
+Website Kit into Lovable, LinkedIn same day) whose live URLs feed
+upgrade 3. Never regenerate the launch package; it would create a new
+package without the render, chapters, or these edits.
 
 ## Recommended next for AI visibility (2026-07-22 assessment)
 

@@ -80,7 +80,9 @@ Feb 8-12 Akumal & Tulum retreat; pillars/series architecture documented in
 conversation and entered by the user). The launch package id is
 0d5825c2e277bfec (the pkg param on the Create view URL).
 
-**Built 2026-07-22 (local, not yet pushed):** Auto-Produce upgrades in
+**Deployed 2026-07-22 (d84dc24, verified locally end to end against a
+mock provider rig; production build not yet eyeballed because sign-in was
+unavailable, see auth note below):** Auto-Produce upgrades in
 response to user feedback on repetition and talking-head sections:
 - Footage variety planner (lib/render.js buildFootagePlan): video sources
   earn slots proportional to their real length (weight = duration/5s, cap
@@ -153,6 +155,52 @@ sessions started after the change. Pickup order:
    re-check the visibility score, then day-one publishing (YouTube +
    Website Kit into Lovable + LinkedIn same day, then socials per the
    rhythm grid).
+
+**Auth state (2026-07-22):** magic links are OFF on production. POST
+/auth/magic/request returns 424 and /auth/config reports magic:false,
+password:true, meaning the Render env is missing MAGIC_EMAILS and/or an
+email sender (RESEND_API_KEY, or SMTP_HOST+SMTP_USER+SMTP_PASS). The user
+plans to fix the env vars (each env save restarts the service). Until
+then, sign in with the studio password (Basic auth works on /api). The
+launch checklist (storage report, hasOriginal audit, long-form render,
+FILL facts, rescore, day-one publishing) is parked on sign-in. When the
+long-form render runs with the new build, expect meta.avatarSections >= 1
+if the script carries on-camera markers, plus clipWindows > videoClips.
+
+## Recommended next for AI visibility (2026-07-22 assessment)
+
+Highest leverage first; 1-3 build directly on the section-based renderer:
+
+1. **True chapters from the render.** Section parts now have exact start
+   offsets; emit real 00:00 chapter lines from finalParts (titles from
+   section content), auto-patch the package chapters/description fields
+   after a successful render, and add hasPart Clip entries (startOffset/
+   endOffset) plus duration/SeekToAction to the VideoObject JSON-LD.
+   Chapters are jump-to answers in Google and assistants.
+2. **Event + TravelAgency schema.** The launch is literally an event
+   (Feb 8-12 retreat, Akumal & Tulum). Add per-package offer/event fields
+   (dates, Place with geo, price) emitting Event JSON-LD in the Website
+   Kit, and upgrade the business block to TravelAgency (LocalBusiness
+   subtype) with areaServed/makesOffer. Most relevant trust signal for
+   ranking the retreat itself.
+3. **Published-URL registry.** Packages never learn where content went
+   live. Add per-platform published-URL fields; feed them into llms.txt
+   (canonical versions), JSON-LD url/sameAs, and upgrade the
+   cross_surface rubric check to count live URLs instead of drafted
+   platforms. Corroboration only works when engines can crawl the copies.
+4. **Testimonial/proof store.** Relationship-driven travel ranks on
+   attributed client outcomes. Store consented testimonials (name, trip,
+   number, date) in the profile, weave them into master context (never
+   invent; [FILL] when absent), add a rubric check for at least one
+   attributed client outcome per package, and emit Review schema where
+   legitimate (on the Event/offer, not self-serving LocalBusiness).
+5. **Entity hub.** Website Kit should emit an About/entity-home block:
+   Person JSON-LD with sameAs to every canonical profile, the definition
+   sentence, NAP identical to GBP/Bing. Add a rubric check for
+   person.sameAs >= 3.
+6. **Ops:** stamp a build id/version into /api/health at deploy so
+   deploys are externally verifiable (current deploys are invisible from
+   outside because all changed surfaces sit behind auth).
 
 ## Agreed roadmap (in order)
 

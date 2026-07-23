@@ -317,6 +317,31 @@ Website Kit into Lovable, LinkedIn same day) whose live URLs feed
 upgrade 3. Never regenerate the launch package; it would create a new
 package without the render, chapters, or these edits.
 
+**Deployed 2026-07-23 early morning (c0dab33), short-form production
+pass after user feedback on a 142s Reel with spoken stage directions and
+a voice switch:**
+- Platform videoSpec (lib/platforms.js) on youtube_shorts (3s cuts,
+  target 45s, cap 58s), instagram_reel (45s/85s, Meta recommendation
+  eligibility ends at 90s), tiktok (34s/58s). The renderer trims speech
+  at a sentence boundary to the cap (meta.trimmedToFit, details line) and
+  the produce panel shows how long the script reads vs the sweet spot.
+- Avatar scope 'all' (UI default on videoSpec platforms): the avatar
+  carries the whole video in one voice, ending the open-vs-narration
+  voice mismatch on short form.
+- cleanScriptForSpeech understands beat sheets: direction lines (SHOT,
+  TEXT OVERLAY, ON SCREEN TEXT, MUSIC and friends) drop entirely, speech
+  labels (HOOK, CTA, AUTHORITY BEAT) keep their sentence but lose the
+  label even with a parenthetical qualifier, and all parenthetical stage
+  directions are stripped, so "(spoken)" is never read aloud again.
+- Reused stills reverse zoom direction per appearance.
+- IMPORTANT user pattern found: the account holds 7 near-duplicate
+  packages (three generated 2026-07-22 13:08/15:12/16:35); the user's
+  problem Reel/Shorts renders came from afd860a1f8aecb16, not the launch
+  package. Only 0d5825c2e277bfec is fact-complete and polished. Steer
+  all production there; offer to delete the strays with her OK.
+- Launch package short-form scripts rewritten to platform length in her
+  voice (reel 47s, shorts 40s, tiktok 32s spoken), score still 96.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

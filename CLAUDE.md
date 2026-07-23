@@ -418,11 +418,21 @@ the differentiate-on-value rule, and a new industry_respect rubric
 check in lib/visibility.js (weight 10) fails the score on unambiguous
 slurs (cesspool, dumpster fire, scammy, rip-off, sleazy, shady,
 sketchy, predatory, soulless, race to the bottom, churn and burn).
-IMPORTANT: render 98a6532432f60e48 (261s, avatar cutout x3, chapters
-applied, rendered 2026-07-23 morning) SPEAKS the word at 1:23 with it
-burned into captions; it must be re-rendered with the fixed script
-before any YouTube upload. A re-render reuses cached narration for
-unchanged sections but resubmits all HeyGen avatar sections (credits).
+RESOLVED: the corrected render is 7068627d7cc2fcbe (255s, calm, her
+professional voice, Sofia Clipboard Bearer cutout, captions, 6 chapters
+re-applied, 48 distinct clip windows, srt verified zero occurrences,
+"the gap I built this to close" spoken at 1:16). THIS is the upload
+cut. Two dirty cuts from the same morning remain on disk as fallbacks
+(98a6532432f60e48 and 9906ce6902f90764, both speak the old word near
+1:16-1:23); offer deletion. CAVEAT on the corrected cut: avatarFailed
+2, so only ONE of the three on-camera sections shows the avatar; the
+other two degraded to narrated b-roll (fail-safe). The user accepted
+completion but may want a re-try once the HeyGen failure cause (check
+credits) is known. Chapter titling by Claude WORKED on this render
+(chapterTitles claude, no error) for the first time in production; the
+temperature fix is confirmed good. The guard (law 17 widened plus the
+industry_respect rubric check) deployed as 9e8afb9 and the launch
+package rescored 96 with industry_respect passing.
 
 **Then, in order:** the user posts the Reel and uploads the long-form
 video to YouTube; when she shares the URL, build upgrade 3

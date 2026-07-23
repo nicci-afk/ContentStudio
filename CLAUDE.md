@@ -460,6 +460,35 @@ temperature fix is confirmed good. The guard (law 17 widened plus the
 industry_respect rubric check) deployed as 9e8afb9 and the launch
 package rescored 96 with industry_respect passing.
 
+**Carousel media matching LIVE (session 6, 2026-07-23, builds e54755c
+then 30ac016):** POST /api/packages/:id/carousel-media matches one
+library asset per numbered slide (Claude-ranked for AI visibility,
+keyword fallback with carouselPlan.error recording the reason), writes
+per-slide alt text into the carousel alt_text field, stores
+pkg.carouselPlan, rebuilds jsonld and score. Launch package matched in
+full AI mode: 7 slides, slide-specific reasons, entity-rich alts
+(Akumal, Tulum, Living Dreams Mexico, consciouscreator.app), score
+96. Found and fixed along the way: slide headers with parentheticals
+("Slide 1 (cover):") never parsed; the AI reply truncated at 2000
+output tokens with a large catalog (now 4000); the industry_respect
+check false-positived on "shady tree" (now requires a business object
+after "shady"). NOTE: an earlier heuristic run overwrote the carousel
+alt_text and the original slide-targeted lines were restored from a
+saved copy before re-running; the current alt_text is the AI slide-
+matched set.
+
+**Render state end of session 6 (voice truth applied):** newest reel
+21c48c2da17a88ac (51s, open in Nicci - Voice 1, body narration still
+the ElevenLabs clone). Long-form ad5312a5f9624681 (264s, clean copy,
+chapters, 50 windows, NO avatar: HeyGen failed 3/3 sections) and
+7068627d7cc2fcbe (255s, 1 avatar section in the wrong Smalls voice)
+are the upload candidates; ad5312a5 is the most voice-consistent.
+PENDING her word: check HeyGen credits (sections failed all day), then
+re-render the Reel avatar scope 'all' (100% Nicci - Voice 1) and
+decide the long-form narration path (recommended: clone the HeyGen
+source audio into ElevenLabs via Voice Studio, pin it as
+narrationVoiceId, then one final long-form render).
+
 **Then, in order:** the user posts the Reel and uploads the long-form
 video to YouTube; when she shares the URL, build upgrade 3
 (published-URL registry: pkg.publishedUrls feeding llms.txt, jsonld

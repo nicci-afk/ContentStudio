@@ -57,6 +57,7 @@ export const api = {
         return res.blob();
       }),
 
+  carouselMedia: (id) => send('POST', `/api/packages/${id}/carousel-media`, {}),
   render: (body) => send('POST', '/api/render', body),
   renderStatus: (id) => get(`/api/render/${id}`),
   packageRenders: (pkgId) => get(`/api/packages/${pkgId}/renders`),

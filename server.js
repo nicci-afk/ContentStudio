@@ -23,7 +23,7 @@ const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
 const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, ProviderError } =
   await import('./lib/providers.js');
-const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia } =
+const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides } =
   await import('./lib/engine.js');
 const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
@@ -482,6 +482,32 @@ app.get('/api/render/:id/srt', (req, res) => {
 app.get('/api/packages/:id/renders', (req, res) => {
   res.json({ items: listRenders(req.params.id) });
 });
+
+// AI-match library assets to the carousel's numbered slides, store the
+// ordered plan on the package, and (unless applyAlt is false) write the
+// per-slide alt text into the carousel's alt_text field.
+app.post('/api/packages/:id/carousel-media', wrap(async (req, res) => {
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const profile = stateStore.get().profile;
+  const { slides, mode } = await matchCarouselSlides({ profile, pkg, items: mediaStore.get().items });
+  let updated = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== pkg.id) return p;
+      p.carouselPlan = { createdAt: new Date().toISOString(), mode, slides };
+      const fields = p.platforms?.instagram_carousel?.fields;
+      if (fields && req.body?.applyAlt !== false) {
+        fields.alt_text = slides.map((sl) => `Slide ${sl.n}: ${sl.alt}`).join('\n');
+      }
+      p.jsonld = buildJsonLd(p, profile);
+      p.visibility = scorePackage(p, profile);
+      updated = p;
+      return p;
+    }),
+  }));
+  res.json({ package: updated });
+}));
 
 // ---- storage (shared data disk: report, cleanup, render deletion) --------
 

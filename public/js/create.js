@@ -245,6 +245,7 @@ function renderPackage(pkg, onDelete) {
           onclick: () => { sessionStorage.setItem('cs-script', script); location.hash = '#/avatar-studio'; },
         }, '🧑‍💻 Film with Avatar')));
     }
+    if (active === 'instagram_carousel') body.append(carouselMediaBlock(pkg, () => { drawTabs(); drawBody(); }));
     if (spec?.group === 'video') body.append(producePanel(pkg, active, () => { drawTabs(); drawBody(); }));
   };
 
@@ -264,6 +265,44 @@ function renderPackage(pkg, onDelete) {
         el('button', { class: 'btn btn-danger btn-xs', onclick: onDelete }, 'Delete'))),
     pkg.quotable ? el('blockquote', { class: 'sample' }, `“${pkg.quotable}”`) : null,
     tabRow, body);
+}
+
+// One tap matches library assets to the carousel's numbered slides, in
+// order, ranked for AI visibility; the per-slide alt text lands in the
+// package's alt_text field and the plan persists on the package.
+function carouselMediaBlock(pkg, onPackageUpdated) {
+  const wrap = el('div', { class: 'asset-field' });
+  const plan = pkg.carouselPlan;
+  const matchBtn = el('button', {
+    class: 'btn btn-primary btn-xs', onclick: async () => {
+      matchBtn.replaceWith(spinner('Matching your library to each slide…'));
+      try {
+        const { package: updated } = await api.carouselMedia(pkg.id);
+        Object.assign(pkg, updated);
+        toast('Slides matched · per-slide alt text written into the package');
+        onPackageUpdated?.();
+      } catch (err) {
+        toast(err.message, 'err');
+        onPackageUpdated?.();
+      }
+    },
+  }, plan ? '↻ Re-match slide media' : '✦ AI-match my library to these slides');
+  wrap.append(el('div', { class: 'row spread' },
+    el('span', { class: 'field-label' }, 'Slide-by-slide media (ranked for AI visibility)'),
+    matchBtn));
+  if (plan?.slides?.length) {
+    wrap.append(
+      el('div', { class: 'mini-media-row', style: 'margin-top:8px' }, plan.slides.map((s) => el('div', { class: 'pick-cell' },
+        el('a', { href: `/api/media/${s.mediaId}/file`, target: '_blank', title: 'Open the full-size file for posting' },
+          el('img', { class: 'mini-thumb on', src: `/api/media/${s.mediaId}/thumb`, alt: s.alt || `slide ${s.n} media` })),
+        el('span', { class: 'muted pick-reason' }, `${s.n}. ${s.reason || ''}`)))),
+      el('p', { class: 'muted', style: 'margin:8px 0 0' },
+        `Post the images in this order (tap one for the full-size file). Each slide's alt text is in the "Alt text per slide" field above; paste it into Instagram's alt text when you upload. ${plan.mode === 'ai' ? 'Ranked by AI against the slide copy.' : 'Matched by keywords (add the Claude key for AI ranking).'}`));
+  } else {
+    wrap.append(el('p', { class: 'muted', style: 'margin:8px 0 0' },
+      'Picks one library image per numbered slide, in order: literal image-to-text match, entity-rich metadata, real geo-tagged moments first, a scroll-stopper for the cover, a human closer for the CTA.'));
+  }
+  return wrap;
 }
 
 function producePanel(pkg, platformId, onPackageUpdated) {

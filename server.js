@@ -25,7 +25,7 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, listRenders, activeRenderIds } = await import('./lib/render.js');
+const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
@@ -451,16 +451,32 @@ app.get('/api/render/:id', (req, res) => {
   res.json(job);
 });
 
+// Render files are id-addressed and never change once written, so the
+// browser may cache them for good instead of re-downloading every visit.
+const RENDER_CACHE = { maxAge: '365d', immutable: true };
+
 app.get('/api/render/:id/video', (req, res) => {
-  const file = renderFile(req.params.id, 'mp4');
-  if (!file) return res.status(404).end();
-  res.sendFile(file);
+  const full = renderFile(req.params.id, 'mp4');
+  if (!full) return res.status(404).end();
+  let file = full;
+  if (req.query.q === 'preview') {
+    const preview = previewFile(req.params.id);
+    if (preview) file = preview;
+    else enqueuePreview(req.params.id); // stream full quality this visit, fast next visit
+  }
+  res.sendFile(file, RENDER_CACHE);
 });
+
+app.get('/api/render/:id/poster', wrap(async (req, res) => {
+  const file = await renderPoster(req.params.id);
+  if (!file) return res.status(404).end();
+  res.sendFile(file, RENDER_CACHE);
+}));
 
 app.get('/api/render/:id/srt', (req, res) => {
   const file = renderFile(req.params.id, 'srt');
   if (!file) return res.status(404).end();
-  res.type('text/plain').sendFile(file);
+  res.type('text/plain').sendFile(file, RENDER_CACHE);
 });
 
 app.get('/api/packages/:id/renders', (req, res) => {

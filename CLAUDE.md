@@ -377,6 +377,29 @@ targets, toast and scroll-into-view respect the sticky bar and safe
 areas. Desktop verified unchanged at 1280px. Before/after pairs live in
 the session scratchpad (pairs/).
 
+**Create tab video speed (built session 6, 2026-07-23, after user
+feedback that videos load far too slowly):** render delivery layer.
+GET /api/render/:id/poster serves a lazily extracted 640px JPEG frame
+(cached as <id>.jpg); a phone-sized preview rendition (<id>.preview.mp4,
+960px long side, CRF 28, veryfast, AAC 96k, faststart) builds in the
+background after every finalize and backfills for the newest 4 done
+renders whenever a package's render list is fetched (never while a
+render job runs, never under 1536MB free disk, one at a time via a
+queue in lib/render.js); GET /api/render/:id/video?q=preview serves it
+when present and falls back to the full master while enqueueing.
+Video, poster, and srt now send Cache-Control public max-age 1y
+immutable (render files are id-addressed and never change; they were
+max-age 0 before, so phones re-downloaded every visit). listRenders
+rows carry preview/mp4Bytes/previewBytes; deleteRender removes the new
+jpg/preview files too. UI (create.js drawRenders): players are
+preload=none + playsinline with the poster, so opening a tab moves only
+a few KB of JPEG instead of chunks of every 80MB master; the in-app
+player streams the preview when ready; the download button is labeled
+"MP4 full quality · NN MB" and always serves the master; only the
+newest render shows expanded, older cuts sit behind "Show N earlier
+renders". Verified locally end to end (network log: tab open fetches
+only posters; play fetches ?q=preview; second render collapses).
+
 **Then, in order:** the user posts the Reel and uploads the long-form
 video to YouTube; when she shares the URL, build upgrade 3
 (published-URL registry: pkg.publishedUrls feeding llms.txt, jsonld

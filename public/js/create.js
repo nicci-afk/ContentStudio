@@ -346,28 +346,46 @@ function producePanel(pkg, platformId, onPackageUpdated) {
     try {
       const { items } = await api.packageRenders(pkg.id);
       const mine = items.filter((r) => r.platformId === platformId);
-      renderList.replaceChildren(...mine.map((r) => {
-        const state = r.status || 'done';
-        if (state === 'running') {
+      const mb = (n) => `${Math.max(1, Math.round((n || 0) / 1e6))} MB`;
+      const statusRow = (r) => {
+        const st = r.status || 'done';
+        if (st === 'running') {
           return el('div', { class: 'render-row' },
             el('span', { class: 'muted' }, `⏳ Rendering now — ${r.step || 'working'}… long-form with avatar can take 10-20 minutes. Safe to leave; it finishes on the server.`));
         }
-        if (state !== 'done') {
-          return el('div', { class: 'render-row' },
-            el('span', { class: 'warn' }, `⚠ ${state}: ${r.error || 'render did not finish'}`));
-        }
         return el('div', { class: 'render-row' },
-          el('video', { controls: true, preload: 'metadata', class: 'video-player', src: `/api/render/${r.id}/video` }),
+          el('span', { class: 'warn' }, `⚠ ${st}: ${r.error || 'render did not finish'}`));
+      };
+      // Players start with only a poster frame; video bytes move when you
+      // press play, and the in-app stream prefers the phone-sized preview.
+      const doneRow = (r) => {
+        const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+        return el('div', { class: 'render-row' },
+          el('video', {
+            controls: true, preload: 'none', playsinline: true,
+            poster: `/api/render/${r.id}/poster`,
+            class: 'video-player',
+            src: `/api/render/${r.id}/video${r.preview ? '?q=preview' : ''}`,
+          }),
           el('div', { class: 'row gap' },
-            (() => {
-              const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
-              return [
-                el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${slug}-${r.platformId}.mp4` }, '⬇ MP4 (keyword filename)'),
-                el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
-              ];
-            })(),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
-      }));
+            el('a', {
+              class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/video`, download: `${slug}-${r.platformId}.mp4`,
+              title: 'The full-quality master with a keyword filename — this is the file to upload',
+            }, `⬇ MP4 full quality${r.mp4Bytes ? ` · ${mb(r.mp4Bytes)}` : ''}`),
+            el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+      };
+      const active = mine.filter((r) => (r.status || 'done') !== 'done');
+      const done = mine.filter((r) => (r.status || 'done') === 'done');
+      const blocks = [...active.map(statusRow), ...done.slice(0, 1).map(doneRow)];
+      if (done.length > 1) {
+        const older = el('div', {});
+        const toggle = el('button', {
+          class: 'btn btn-ghost btn-xs', onclick: () => { older.replaceChildren(...done.slice(1).map(doneRow)); toggle.remove(); },
+        }, `Show ${done.length - 1} earlier render${done.length === 2 ? '' : 's'}`);
+        blocks.push(el('div', { class: 'render-row' }, toggle), older);
+      }
+      renderList.replaceChildren(...blocks);
     } catch { /* list is best-effort */ }
   };
 

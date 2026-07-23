@@ -208,6 +208,30 @@ app.get('/api/media/:id/thumb', (req, res) => {
   res.type('image/jpeg').send(buf);
 });
 
+// Full-size download: the strongest stored copy of an item (the real
+// video file when the original was uploaded, the full-resolution frame
+// otherwise). The filename comes from the alt text so it carries
+// keywords wherever the file lands next.
+app.get('/api/media/:id/file', (req, res) => {
+  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
+  if (!item) return res.status(404).end();
+  const slug = String(item.alt || item.caption || item.name || 'media')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'media';
+  if (item.kind === 'video') {
+    const original = mediaPath(item.id, 'original');
+    if (fs.existsSync(original)) {
+      const nameExt = String(item.name || '').split('.').pop().toLowerCase();
+      const ext = /^[a-z0-9]{2,4}$/.test(nameExt) ? nameExt : 'mp4';
+      res.set('Content-Disposition', `attachment; filename="${slug}.${ext}"`);
+      return res.type(item.mime || 'video/mp4').sendFile(original);
+    }
+  }
+  const buf = readMediaFile(item.id, 'render') || readMediaFile(item.id, 'analysis') || readMediaFile(item.id, 'thumb');
+  if (!buf) return res.status(404).end();
+  res.set('Content-Disposition', `attachment; filename="${slug}.jpg"`);
+  res.type('image/jpeg').send(buf);
+});
+
 // Original video upload: the browser streams the untouched file here after
 // import so Auto-Produce can cut real moving clips into b-roll. Streamed
 // straight to disk (never buffered in memory) with a hard size cap.

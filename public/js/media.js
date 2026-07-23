@@ -444,6 +444,12 @@ function mediaCard(item, refresh) {
         item.keywords?.length ? el('div', { class: 'chip-row' }, item.keywords.map((k) => el('span', { class: 'chip' }, k))) : null,
         item.storyIdeas?.length ? el('ul', { class: 'plain-list' }, item.storyIdeas.map((s) => el('li', {}, `💡 ${s}`))) : null,
         el('div', { class: 'row gap' },
+          el('a', {
+            class: 'btn btn-ghost btn-xs',
+            href: `/api/media/${item.id}/file`,
+            download: '',
+            title: 'Download the full-size stored copy with a keyword filename. Pair it with the alt text above when posting: platforms strip embedded photo metadata, so the alt text field is what carries it.',
+          }, '⬇ Download'),
           el('button', {
             class: 'btn btn-ghost btn-xs', onclick: async () => {
               detail.replaceChildren(spinner('Analyzing…'));

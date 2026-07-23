@@ -477,6 +477,41 @@ alt_text and the original slide-targeted lines were restored from a
 saved copy before re-running; the current alt_text is the AI slide-
 matched set.
 
+**HeyGen credit conservation + short-beat avatars (session 6,
+2026-07-23, user: credits burned fast, never wants a full-video avatar,
+just a few seconds on camera then B-roll):**
+- Avatar clip cache (lib/render.js): finished HeyGen clips are cached
+  in <workspace>/renders/avatar-cache keyed on
+  sha256(avatarId|avatarKind|voiceId|ext|orientation|avatarSpeed|text).
+  Re-rendering the same on-camera beat reuses the raw clip (webm/mp4)
+  and composites it over fresh footage, so iteration costs ZERO HeyGen
+  credits. Only the raw clip is cached (compositing is local + cheap).
+  Fully-cached beats resolve before the HeyGen poll loop (no wait).
+  meta/job carry avatarCached and avatarFresh; details line shows "N
+  avatar clips reused (no new HeyGen credits)". storage report adds
+  avatarCacheBytes. This is THE fix for the burn: every re-render I did
+  this day re-spent credits because HeyGen had no cache (narration did).
+- Short on-camera beats: capAvatarBeat caps each avatar beat to
+  AVATAR_BEAT_SECONDS (12s) at a sentence boundary; overflow speaks over
+  B-roll (no text lost). Applies to open and each sections beat. Bounds
+  HeyGen seconds per beat, and each capped beat is now a single chunk.
+- UI default scope is now 'open' for EVERY video platform (was 'all'
+  for short-form). Scope select reworded with credit cost: open = "A
+  few seconds on camera, then B-roll (fewest credits)", sections =
+  "Short on-camera beat at each [ON CAMERA] mark", all = "...(most
+  credits)". She never wants 'all'; it stays available but demoted.
+- Voice pins updated per her exact IDs: avatarVoiceId
+  e44aa04c8d60430ab6da51db943f1caf (HeyGen "Nicci"), narrationVoiceId
+  COsb5gD7rHYmEEDkf7DB (ElevenLabs "Nicci" cloned). Both set in
+  production voicePrefs. preferredVoice defaults every voice select to
+  these. NOTE she still hasn't shared any video; goal is one she loves,
+  cheaply. Avatar beats speak the HeyGen voice, B-roll narration the
+  ElevenLabs voice: if those two still sound different to her, the fix
+  is one matching clone (upload the HeyGen source audio into Voice
+  Studio). Built + tested locally (boot, silent render, beat-cap unit
+  tests, cache-key determinism, UI scope default); the HeyGen cache
+  hit/miss only proves out in a real production avatar render.
+
 **Render state end of session 6 (voice truth applied):** newest reel
 21c48c2da17a88ac (51s, open in Nicci - Voice 1, body narration still
 the ElevenLabs clone). Long-form ad5312a5f9624681 (264s, clean copy,

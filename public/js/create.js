@@ -314,7 +314,9 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   // Short-form platforms carry a videoSpec (duration cap + fast cuts) and
   // default to the avatar carrying the whole video in one voice.
   const videoSpec = appState.platforms.find((p) => p.id === platformId)?.videoSpec || null;
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: videoSpec ? 'all' : (hasOnCamera ? 'sections' : 'open'), avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
+  // Default to a short avatar open, then B-roll: the fewest HeyGen credits,
+  // and what she wants (a few seconds on camera, not a full-video avatar).
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; saveVoicePref('narration', state.voiceId); } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -365,11 +367,11 @@ function producePanel(pkg, platformId, onPackageUpdated) {
           // The pinned avatar voice wins; otherwise prefer the voice named
           // after the creator over whatever sits first in the HeyGen list.
           const ownVoice = preferredVoice(voices, 'avatar') || pickOwnVoice(voices);
-          const scopeSel = el('select', { class: 'input select', title: 'Where your avatar appears in the video', onchange: (ev) => { state.avatarScope = ev.target.value; } },
-            el('option', { value: 'all', selected: state.avatarScope === 'all' }, 'Avatar speaks the whole video (one voice)'),
+          const scopeSel = el('select', { class: 'input select', title: 'Where your avatar appears — fewer on-camera seconds means fewer HeyGen credits', onchange: (ev) => { state.avatarScope = ev.target.value; } },
+            el('option', { value: 'open', selected: state.avatarScope === 'open' }, 'A few seconds on camera, then B-roll (fewest credits)'),
             el('option', { value: 'sections', selected: state.avatarScope === 'sections' },
-              hasOnCamera ? 'Avatar on every [ON CAMERA] section' : 'Avatar on on-camera sections (none marked in this script)'),
-            el('option', { value: 'open', selected: state.avatarScope === 'open' }, 'Avatar on the open only'));
+              hasOnCamera ? 'Short on-camera beat at each [ON CAMERA] mark' : 'Short on-camera beats (none marked in this script)'),
+            el('option', { value: 'all', selected: state.avatarScope === 'all' }, 'Avatar speaks the whole video (most credits)'));
           const styleSel = el('select', { class: 'input select', title: 'How your avatar appears on screen', onchange: (ev) => { state.avatarStyle = ev.target.value; } },
             el('option', { value: 'cutout', selected: state.avatarStyle === 'cutout' }, 'Cut out over your footage (green screen look)'),
             el('option', { value: 'full', selected: state.avatarStyle === 'full' }, 'Full frame'));
@@ -418,7 +420,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
               title: 'The full-quality master with a keyword filename — this is the file to upload',
             }, `⬇ MP4 full quality${r.mp4Bytes ? ` · ${mb(r.mp4Bytes)}` : ''}`),
             el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
       };
       const active = mine.filter((r) => (r.status || 'done') !== 'done');
       const done = mine.filter((r) => (r.status || 'done') === 'done');

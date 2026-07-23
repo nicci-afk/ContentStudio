@@ -273,20 +273,74 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 /* ---- mobile ---- */
 @media (max-width: 760px) {
   body { flex-direction: column; }
+
+  /* Two-row top bar: brand + workspace on top, full nav with labels below.
+     The nav row scrolls sideways but shows several items at once, so every
+     view is reachable and visible. */
   .sidebar {
     width: 100%; height: auto; position: sticky; top: 0; z-index: 50;
-    flex-direction: row; align-items: center; padding: 10px 12px; gap: 10px;
+    flex-direction: row; flex-wrap: wrap; align-items: center;
+    padding: 10px 12px 0; gap: 8px 10px;
     border-right: none; border-bottom: 1px solid var(--line);
+    overflow-y: visible;
   }
+  .brand { padding: 0; flex: 1; min-width: 0; }
   .brand-sub, .provider-dots { display: none; }
-  .ws-switcher { flex-shrink: 1; min-width: 0; max-width: 150px; }
-  .nav-links { flex-direction: row; overflow-x: auto; flex: 1; }
-  .nav-link { padding: 7px 10px; flex-shrink: 0; }
-  .nav-label { display: none; }
-  .nav-icon { width: auto; font-size: 16px; }
-  .main { padding: 18px 14px 60px; }
+  .ws-switcher { flex-shrink: 1; min-width: 0; max-width: 180px; }
+  .nav-links {
+    flex: 1 1 100%; flex-direction: row; gap: 2px;
+    overflow-x: auto; margin: 0 -12px; padding: 2px 8px 6px;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-link {
+    flex-direction: column; gap: 3px; flex-shrink: 0;
+    padding: 6px 11px; font-size: 10px; font-weight: 600;
+  }
+  .nav-link.active { box-shadow: inset 0 -2px 0 var(--accent); }
+  .nav-label { display: block; }
+  .nav-icon { width: auto; font-size: 17px; }
+
+  .main { padding: 16px 12px calc(60px + env(safe-area-inset-bottom)); }
+  /* Anything scrolled into view must clear the sticky two-row bar */
+  .view > * { scroll-margin-top: 106px; }
+
   .grid-2 { grid-template-columns: 1fr; }
   .week-grid { grid-template-columns: repeat(2, 1fr); }
   .brief-row { grid-template-columns: 1fr; gap: 2px; }
   .view-head { flex-direction: column; align-items: stretch; }
+
+  /* iOS Safari zooms the page into any focused input under 16px */
+  .input, .select, .textarea { font-size: 16px; }
+
+  /* Finger-sized targets */
+  .btn { min-height: 42px; }
+  .btn-xs { min-height: 36px; padding: 7px 12px; }
+  .chip { padding: 7px 13px; font-size: 12.5px; }
+  .step { padding: 8px 13px; }
+  .tab { padding: 10px 13px; font-size: 13px; }
+
+  /* Rows that crush their children on a narrow screen wrap instead */
+  .row.spread { flex-wrap: wrap; }
+
+  /* Package tabs: wrap so every platform is visible at once */
+  .tab-row { flex-wrap: wrap; overflow-x: visible; gap: 2px 4px; }
+
+  /* Package list: topic on its own line, meta + score beneath */
+  .pkg-row { flex-wrap: wrap; gap: 4px 12px; }
+  .pkg-topic { flex: 1 1 100%; }
+
+  /* Library browses better as two columns */
+  .media-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+  /* Pillars & series: name gets the full row, the rest shares the next */
+  .pillar-fields, .series-fields { flex-wrap: wrap; }
+  .pillar-fields > .input:first-child, .series-fields > .input:first-child { flex: 1 1 100%; }
+  .series-fields > .select { flex: 1 1 140px; width: auto; min-width: 0; }
+  .cadence-input { flex: 1 1 90px; }
+
+  /* Produce panel: every control full width, stacked */
+  .produce-controls, .avatar-options { flex-direction: column; align-items: stretch; }
+
+  .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }

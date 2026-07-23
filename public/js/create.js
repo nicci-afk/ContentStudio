@@ -279,7 +279,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
     el('option', { value: '' }, 'No narration key — silent preview'));
-  const avatarWrap = el('div', { class: 'row gap wrap', style: 'display:none' });
+  const avatarWrap = el('div', { class: 'row gap wrap avatar-options', style: 'display:none' });
   const orientationSelect = el('select', { class: 'input select', onchange: (e) => { state.orientation = e.target.value; } },
     el('option', { value: 'portrait', selected: defaultOrientation === 'portrait' }, 'Portrait 9:16'),
     el('option', { value: 'landscape', selected: defaultOrientation === 'landscape' }, 'Landscape 16:9'));
@@ -419,13 +419,13 @@ function producePanel(pkg, platformId, onPackageUpdated) {
     el('div', { class: 'row spread' },
       el('span', { class: 'field-label' }, '🎬 Auto-produce this video'),
       el('span', { class: 'muted' }, 'Your library imagery + your cloned voice, rendered to a finished MP4')),
-    el('div', { class: 'row gap wrap' },
+    el('div', { class: 'row gap wrap produce-controls' },
       voiceSelect, deliverySelect, orientationSelect, avatarToggle),
     avatarWrap,
-    videoSpec
-      ? el('p', { class: 'muted', style: 'margin:2px 0 6px' },
-          `This script reads about ${estSeconds}s spoken · the sweet spot here is ${videoSpec.targetSeconds}s and the cap is ${videoSpec.maxSeconds}s (anything longer trims automatically). Tighten the script field first for the strongest cut.`)
-      : null,
+    ...(videoSpec
+      ? [el('p', { class: 'muted', style: 'margin:2px 0 6px' },
+          `This script reads about ${estSeconds}s spoken · the sweet spot here is ${videoSpec.targetSeconds}s and the cap is ${videoSpec.maxSeconds}s (anything longer trims automatically). Tighten the script field first for the strongest cut.`)]
+      : []),
     el('button', { class: 'btn btn-primary', onclick: produce }, '🎬 Produce video'),
     result, renderList,
   );

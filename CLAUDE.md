@@ -358,21 +358,24 @@ render on the launch package: 42bb6558c7bb0488.
 
 ## Next session pickup (written 2026-07-23, session 5 handoff)
 
-**Immediate task: mobile optimization.** The user works from an iPhone
-and cannot see all options (produce panel selects and chip rows overflow
-or hide). public/index.html already has the right viewport meta; the
-whole UI lives in ONE stylesheet, public/css/studio.css, which contains
-exactly one @media query, so the layout is effectively desktop-only.
-Audit every view (Create with the produce panel and its five controls,
-Library grid and detail, Strategy, Voice/Avatar Studios, Visibility tab,
-package tabs) at iPhone size (390x844) with Playwright
-(executablePath '/opt/pw-browsers/chromium'), then add responsive rules:
-stack .row groups, let chip rows and tab rows wrap or scroll
-horizontally, full-width selects and buttons on small screens, larger
-touch targets, and make long pre blocks scroll instead of stretching the
-page. Test locally (PORT=4616, the mock rig in the session scratchpad is
-gone; a data dir seeds itself empty, enough for layout checks), then
-deploy per the rules below.
+**Mobile optimization: DONE (deployed 2026-07-23, 11f20c0, session 6).**
+Audited every view at 390x844 with Playwright (seeded demo profile,
+canvas-generated media, template package; provider list endpoints mocked
+via route interception). Root causes found: the mobile top bar showed
+one nav icon with labels hidden and no scroll affordance, the package
+tab row exposed 2 of 16 tabs, pillar and series inputs collapsed to
+slivers, and the produce panel rendered a literal "null" text node
+(DOM append stringifies null; the videoSpec conditional in create.js).
+Fixes, all inside the existing 760px media query plus two class hooks
+(produce-controls, avatar-options) in create.js: two-row top bar (brand
+plus workspace switcher, then a full-width labeled nav row), package
+tabs wrap so all platforms are visible, .row.spread wraps everywhere,
+pkg-row topics take a full line, pillar/series fields stack, produce
+panel controls stack full width, media grid goes two columns, inputs go
+to 16px on mobile (stops iOS Safari zoom-on-focus), larger touch
+targets, toast and scroll-into-view respect the sticky bar and safe
+areas. Desktop verified unchanged at 1280px. Before/after pairs live in
+the session scratchpad (pairs/).
 
 **Then, in order:** the user posts the Reel and uploads the long-form
 video to YouTube; when she shares the URL, build upgrade 3

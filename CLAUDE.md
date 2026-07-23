@@ -356,6 +356,43 @@ needs more shots than the library holds. Regeneration is NEVER the fix
 for footage variety; the pool is renderer-level. First no-repeat Reel
 render on the launch package: 42bb6558c7bb0488.
 
+## Next session pickup (written 2026-07-23, session 5 handoff)
+
+**Immediate task: mobile optimization.** The user works from an iPhone
+and cannot see all options (produce panel selects and chip rows overflow
+or hide). public/index.html already has the right viewport meta; the
+whole UI lives in ONE stylesheet, public/css/studio.css, which contains
+exactly one @media query, so the layout is effectively desktop-only.
+Audit every view (Create with the produce panel and its five controls,
+Library grid and detail, Strategy, Voice/Avatar Studios, Visibility tab,
+package tabs) at iPhone size (390x844) with Playwright
+(executablePath '/opt/pw-browsers/chromium'), then add responsive rules:
+stack .row groups, let chip rows and tab rows wrap or scroll
+horizontally, full-width selects and buttons on small screens, larger
+touch targets, and make long pre blocks scroll instead of stretching the
+page. Test locally (PORT=4616, the mock rig in the session scratchpad is
+gone; a data dir seeds itself empty, enough for layout checks), then
+deploy per the rules below.
+
+**Then, in order:** the user posts the Reel and uploads the long-form
+video to YouTube; when she shares the URL, build upgrade 3
+(published-URL registry: pkg.publishedUrls feeding llms.txt, jsonld
+url/sameAs, SeekToAction already wired to read
+publishedUrls.youtube_long, cross_surface check counts live URLs); a
+citation-layer regenerate endpoint (fills the empty pkg.queryMap and the
+three [FILL] FAQ answers, the PATCH route only reaches platform fields);
+sync jsonld hasPart Clip names from the edited chapters field; Website
+Kit into Lovable (clean the FAQ answers first); then upgrades 2, 4, 5
+from the list below (ask her for retreat venue details, price already
+known, and for testimonials).
+
+**Auth for the next session:** sign in with the studio password via
+Basic auth on /api (password lives in the user's conversations only,
+ask her for it; never store it in the repo). Magic links work for
+nicci@travelghr.com (whoskha@gmail.com still needs the Resend domain
+verification plus MAGIC_FROM). Confirm the running build first via GET
+/api/health (build field, currently 04c9e2f).
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

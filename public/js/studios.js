@@ -1,4 +1,4 @@
-import { api, appState } from './api.js';
+import { api, appState, pickOwnVoice } from './api.js';
 import { el, field, textInput, textArea, toast, spinner, download, emptyState, readFileAsDataURL } from './ui.js';
 
 const keyMissing = (name, provider, url) =>
@@ -190,6 +190,7 @@ export function renderAvatarStudio(root) {
   loadAvatars();
   api.avatarVoices().then(({ voices }) => {
     voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
-    voiceId = voices[0]?.id || null;
+    voiceId = (pickOwnVoice(voices) || voices[0])?.id || null;
+    if (voiceId) voiceSelect.value = voiceId;
   }).catch(() => {});
 }

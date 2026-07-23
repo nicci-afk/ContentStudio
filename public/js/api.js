@@ -67,6 +67,14 @@ export const api = {
   avatarStatus: (id) => get(`/api/avatar/status/${id}`),
 };
 
+// Prefer the provider voice named after the creator (their HeyGen-linked
+// clone) over whatever happens to sit first in the account's voice list.
+export function pickOwnVoice(voices) {
+  const first = (appState.profile?.business?.person?.name || '').trim().split(/\s+/)[0];
+  if (!first || first.length < 2) return null;
+  return (voices || []).find((v) => (v.name || '').toLowerCase().includes(first.toLowerCase())) || null;
+}
+
 export const appState = {
   state: null,
   health: null,

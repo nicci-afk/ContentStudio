@@ -247,6 +247,19 @@ she wants calm and welcoming. Always render with delivery "calm" (which
 now also slows narration to 0.93 speed) and that voice id. The instant
 clone COsb5gD7rHYmEEDkf7DB was used for launch render v1.
 
+**HeyGen avatar voice (2026-07-23, from the user):** the CORRECT HeyGen
+voice for her avatar is "Nicci - Voice 1", id dDFO3I2QaLuryXEunPHM
+(English, female). The UI used to default the avatar voice to whatever
+sat first in the HeyGen list ("Smalls - Voice 1", a different voice),
+which put a wrong first voice on every avatar open; she caught the
+mismatch on a Reel (open in Smalls, narration in her clone). Fixed in
+the UI: pickOwnVoice (api.js) matches the creator's first name against
+the voice list, so the produce panel and Avatar Studio now default to
+her clone. Any render made through the API must pass that voice id
+explicitly. Renders made before the fix carry the wrong avatar voice,
+including the corrected long-form cut 7068627d7cc2fcbe (its one
+surviving avatar section speaks Smalls).
+
 **Deployed 2026-07-22 evening, second and third pushes (891a861, then
 cf001ee for avatar group labels), built fourth session and verified
 locally against the extended mock rig first:**

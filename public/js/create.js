@@ -1,4 +1,4 @@
-import { api, appState } from './api.js';
+import { api, appState, pickOwnVoice } from './api.js';
 import { el, field, textInput, textArea, toast, spinner, copyBtn, copyText, download, scoreBadge, emptyState } from './ui.js';
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
@@ -321,6 +321,9 @@ function producePanel(pkg, platformId, onPackageUpdated) {
               a.kind === 'talking_photo' ? `${a.name} (your photo avatar)` : a.name)));
           const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; } },
             ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
+          // The avatar should open in the creator's own voice, not whatever
+          // happens to sit first in the HeyGen list.
+          const ownVoice = pickOwnVoice(voices);
           const scopeSel = el('select', { class: 'input select', title: 'Where your avatar appears in the video', onchange: (ev) => { state.avatarScope = ev.target.value; } },
             el('option', { value: 'all', selected: state.avatarScope === 'all' }, 'Avatar speaks the whole video (one voice)'),
             el('option', { value: 'sections', selected: state.avatarScope === 'sections' },
@@ -330,7 +333,8 @@ function producePanel(pkg, platformId, onPackageUpdated) {
             el('option', { value: 'cutout', selected: state.avatarStyle === 'cutout' }, 'Cut out over your footage (green screen look)'),
             el('option', { value: 'full', selected: state.avatarStyle === 'full' }, 'Full frame'));
           pickAvatar(avatars[0]?.id || null);
-          state.heygenVoiceId = voices[0]?.id || null;
+          state.heygenVoiceId = (ownVoice || voices[0])?.id || null;
+          if (state.heygenVoiceId) vSel.value = state.heygenVoiceId;
           avatarWrap.append(aSel, vSel, scopeSel, styleSel);
         } catch (err) {
           toast(`Avatar unavailable: ${err.message}`, 'err');

@@ -342,6 +342,18 @@ a voice switch:**
 - Launch package short-form scripts rewritten to platform length in her
   voice (reel 47s, shorts 40s, tiktok 32s spoken), score still 96.
 
+**Deployed 2026-07-23 (04c9e2f), after the user demanded zero duplicate
+footage within a video:** no-repeat guarantee. The renderer estimates
+needed slide slots up front (est speech seconds / slot, capped at 80)
+and tops the media pool up from the whole library when the package's
+attached assets cannot fill every slot (ranking: video originals +3,
+analyzed +2, plus quality; meta.mediaPool/mediaTopUp, details line shows
+"+N library assets for variety"). buildFootagePlan refuses to reuse any
+source while an unused one remains. Repeats now only happen when a video
+needs more shots than the library holds. Regeneration is NEVER the fix
+for footage variety; the pool is renderer-level. First no-repeat Reel
+render on the launch package: 42bb6558c7bb0488.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

@@ -170,9 +170,19 @@ Password sign-in and Basic auth on /api both still work.
 **Chapter titling root cause (2026-07-22 night, from the new
 chapterTitleError diagnostic):** anthropic 400, "temperature is
 deprecated for this model" (claude-sonnet-5 rejects temperature 0.4).
-Fix queued for the next code pass: drop the temperature override in
-titleChapters (and prefer omitting temperature in providers.claude
-whenever it equals the default).
+FIXED and deployed in dc6e90a: titleChapters no longer overrides
+temperature and providers.claude omits the neutral default entirely, so
+the next section render should get Claude-written titles automatically.
+
+**Deployed 2026-07-22 late night (dc6e90a):** Library full-size
+downloads: GET /api/media/:id/file serves the strongest stored copy
+(video original when uploaded, full-resolution frame otherwise) with an
+alt-text keyword filename, and the Library detail panel has a Download
+button. Verified on production against a real photo. Note for the user
+flow: platforms strip embedded photo metadata at upload, so the alt text
+field (copy it from the Library panel into, for example, Facebook's
+Alternative text) is what actually carries the metadata; the button
+tooltip says the same.
 
 **Built 2026-07-22, third session (on the dev branch, tested locally end
 to end against a rebuilt mock rig, NOT yet deployed):** upgrades 1 and 6

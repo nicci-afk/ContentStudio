@@ -334,11 +334,13 @@ a voice switch:**
   label even with a parenthetical qualifier, and all parenthetical stage
   directions are stripped, so "(spoken)" is never read aloud again.
 - Reused stills reverse zoom direction per appearance.
-- IMPORTANT user pattern found: the account holds 7 near-duplicate
-  packages (three generated 2026-07-22 13:08/15:12/16:35); the user's
-  problem Reel/Shorts renders came from afd860a1f8aecb16, not the launch
-  package. Only 0d5825c2e277bfec is fact-complete and polished. Steer
-  all production there; offer to delete the strays with her OK.
+- IMPORTANT user pattern found: the account held 7 near-duplicate
+  packages; the user's problem Reel/Shorts renders came from
+  afd860a1f8aecb16, not the launch package. With her explicit OK
+  (2026-07-23) the six duplicates were deleted; 0d5825c2e277bfec is now
+  the only package in the workspace. Their old renders remain on disk
+  (orphaned, cleanable via /api/storage/renders/delete if space is ever
+  needed).
 - Launch package short-form scripts rewritten to platform length in her
   voice (reel 47s, shorts 40s, tiktok 32s spoken), score still 96.
 

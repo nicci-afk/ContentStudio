@@ -1,4 +1,4 @@
-import { api, appState, pickOwnVoice } from './api.js';
+import { api, appState, pickOwnVoice, preferredVoice, saveVoicePref } from './api.js';
 import { el, field, textInput, textArea, toast, spinner, copyBtn, copyText, download, scoreBadge, emptyState } from './ui.js';
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
@@ -316,7 +316,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const videoSpec = appState.platforms.find((p) => p.id === platformId)?.videoSpec || null;
   const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: videoSpec ? 'all' : (hasOnCamera ? 'sections' : 'open'), avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
-  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
+  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; saveVoicePref('narration', state.voiceId); } },
     el('option', { value: '' }, 'No narration key — silent preview'));
   const avatarWrap = el('div', { class: 'row gap wrap avatar-options', style: 'display:none' });
   const orientationSelect = el('select', { class: 'input select', onchange: (e) => { state.orientation = e.target.value; } },
@@ -335,8 +335,10 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   api.voices().then(({ voices }) => {
     const own = (v) => v.category === 'professional' || v.category === 'cloned';
     voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name}${own(v) ? ' · your voice' : ''}`)));
-    // The professional clone reads truest; an instant clone is the backup.
-    state.voiceId = voices.find((v) => v.category === 'professional')?.id
+    // The pinned voice wins outright; otherwise the professional clone
+    // reads truest with the instant clone as backup.
+    state.voiceId = preferredVoice(voices, 'narration')?.id
+      || voices.find((v) => v.category === 'professional')?.id
       || voices.find((v) => v.category === 'cloned')?.id || voices[0]?.id || null;
     if (state.voiceId) voiceSelect.value = state.voiceId;
   }).catch(() => {});
@@ -358,11 +360,11 @@ function producePanel(pkg, platformId, onPackageUpdated) {
           const aSel = el('select', { class: 'input select', onchange: (ev) => pickAvatar(ev.target.value) },
             ...avatars.map((a) => el('option', { value: a.id },
               a.kind === 'talking_photo' ? `${a.name} (your photo avatar)` : a.name)));
-          const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; } },
+          const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; saveVoicePref('avatar', state.heygenVoiceId); } },
             ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
-          // The avatar should open in the creator's own voice, not whatever
-          // happens to sit first in the HeyGen list.
-          const ownVoice = pickOwnVoice(voices);
+          // The pinned avatar voice wins; otherwise prefer the voice named
+          // after the creator over whatever sits first in the HeyGen list.
+          const ownVoice = preferredVoice(voices, 'avatar') || pickOwnVoice(voices);
           const scopeSel = el('select', { class: 'input select', title: 'Where your avatar appears in the video', onchange: (ev) => { state.avatarScope = ev.target.value; } },
             el('option', { value: 'all', selected: state.avatarScope === 'all' }, 'Avatar speaks the whole video (one voice)'),
             el('option', { value: 'sections', selected: state.avatarScope === 'sections' },

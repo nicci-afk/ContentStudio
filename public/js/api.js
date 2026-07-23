@@ -76,6 +76,24 @@ export function pickOwnVoice(voices) {
   return (voices || []).find((v) => (v.name || '').toLowerCase().includes(first.toLowerCase())) || null;
 }
 
+// The creator's pinned voice per role ('narration' = ElevenLabs,
+// 'avatar' = HeyGen). An exact id match beats every heuristic, and any
+// change made in a voice select is saved back as the new studio-wide
+// default, so the chosen voice holds everywhere, every time.
+export function preferredVoice(voices, kind) {
+  const prefs = appState.profile?.voicePrefs || {};
+  const id = kind === 'avatar' ? prefs.avatarVoiceId : prefs.narrationVoiceId;
+  return id ? (voices || []).find((v) => v.id === id) || null : null;
+}
+
+export function saveVoicePref(kind, id) {
+  if (!id) return;
+  const prefs = { ...(appState.profile?.voicePrefs || {}) };
+  prefs[kind === 'avatar' ? 'avatarVoiceId' : 'narrationVoiceId'] = id;
+  if (appState.state?.profile) appState.state.profile.voicePrefs = prefs;
+  api.patchState('profile.voicePrefs', prefs).catch(() => { /* sticky best effort */ });
+}
+
 export const appState = {
   state: null,
   health: null,

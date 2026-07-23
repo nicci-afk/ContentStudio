@@ -1,4 +1,4 @@
-import { api, appState, pickOwnVoice } from './api.js';
+import { api, appState, pickOwnVoice, preferredVoice, saveVoicePref } from './api.js';
 import { el, field, textInput, textArea, toast, spinner, download, emptyState, readFileAsDataURL } from './ui.js';
 
 const keyMissing = (name, provider, url) =>
@@ -23,7 +23,7 @@ export function renderVoiceStudio(root) {
   const script = sessionStorage.getItem('cs-script') || '';
   sessionStorage.removeItem('cs-script');
 
-  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { voiceId = e.target.value; } });
+  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { voiceId = e.target.value; saveVoicePref('narration', voiceId); } });
   const ttsText = textArea({ rows: 8, value: script, placeholder: 'Paste a script, or send one here from any package with “Narrate in Voice Studio”.' });
   const player = el('div', {});
 
@@ -86,7 +86,8 @@ export function renderVoiceStudio(root) {
   api.voices().then(({ voices: v }) => {
     voices = v;
     voiceSelect.replaceChildren(...voices.map((vc) => el('option', { value: vc.id }, `${vc.name}${vc.category === 'cloned' ? ' · your clone' : ''}`)));
-    voiceId = voices.find((vc) => vc.category === 'cloned')?.id || voices[0]?.id || null;
+    voiceId = preferredVoice(voices, 'narration')?.id
+      || voices.find((vc) => vc.category === 'cloned')?.id || voices[0]?.id || null;
     if (voiceId) voiceSelect.value = voiceId;
   }).catch((err) => toast(err.message, 'err'));
 }
@@ -115,7 +116,7 @@ export function renderAvatarStudio(root) {
   let voiceId = null;
   const avatarSelect = el('select', { class: 'input select', onchange: (e) => { avatarId = e.target.value; } });
   const avatarNote = el('p', { class: 'muted', style: 'margin:6px 0 0;font-size:0.85em' });
-  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { voiceId = e.target.value; } });
+  const voiceSelect = el('select', { class: 'input select', onchange: (e) => { voiceId = e.target.value; saveVoicePref('avatar', voiceId); } });
   const orientation = el('select', { class: 'input select' },
     el('option', { value: 'portrait' }, 'Portrait 9:16 (Reels / Shorts / TikTok)'),
     el('option', { value: 'landscape' }, 'Landscape 16:9 (YouTube)'));
@@ -190,7 +191,7 @@ export function renderAvatarStudio(root) {
   loadAvatars();
   api.avatarVoices().then(({ voices }) => {
     voiceSelect.replaceChildren(...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
-    voiceId = (pickOwnVoice(voices) || voices[0])?.id || null;
+    voiceId = (preferredVoice(voices, 'avatar') || pickOwnVoice(voices) || voices[0])?.id || null;
     if (voiceId) voiceSelect.value = voiceId;
   }).catch(() => {});
 }

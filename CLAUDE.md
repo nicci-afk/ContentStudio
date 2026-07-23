@@ -247,18 +247,31 @@ she wants calm and welcoming. Always render with delivery "calm" (which
 now also slows narration to 0.93 speed) and that voice id. The instant
 clone COsb5gD7rHYmEEDkf7DB was used for launch render v1.
 
-**HeyGen avatar voice (2026-07-23, from the user):** the CORRECT HeyGen
-voice for her avatar is "Nicci - Voice 1", id dDFO3I2QaLuryXEunPHM
-(English, female). The UI used to default the avatar voice to whatever
-sat first in the HeyGen list ("Smalls - Voice 1", a different voice),
-which put a wrong first voice on every avatar open; she caught the
-mismatch on a Reel (open in Smalls, narration in her clone). Fixed in
-the UI: pickOwnVoice (api.js) matches the creator's first name against
-the voice list, so the produce panel and Avatar Studio now default to
-her clone. Any render made through the API must pass that voice id
-explicitly. Renders made before the fix carry the wrong avatar voice,
-including the corrected long-form cut 7068627d7cc2fcbe (its one
-surviving avatar section speaks Smalls).
+**THE canonical voice (2026-07-23, user directive, supersedes the
+ElevenLabs preference above):** the ONE accurate voice is HeyGen
+"Nicci - Voice 1", id dDFO3I2QaLuryXEunPHM (English, female). She wants
+it 100% of the time, everywhere a voice is used. CRITICAL LIMIT: that
+voice exists ONLY in HeyGen; the ElevenLabs account does not have it
+(TTS with that id returns elevenlabs 404, verified in production). The
+ElevenLabs "Nicci" clones (8TIjMlEyk1P66yOtXPHa professional, COsb...
+instant) sound DIFFERENT from her and are now known mismatches; use
+them only where ElevenLabs narration is unavoidable, until a matching
+ElevenLabs clone exists (recommended: clone the same source audio that
+built the HeyGen voice via Voice Studio, then pin it). Consequences:
+short-form should render avatar scope 'all' (HeyGen speaks everything,
+correct voice); long-form b-roll narration is ElevenLabs and therefore
+mismatched until the matching clone exists.
+Voice pinning shipped (session 6): profile.voicePrefs
+{narrationVoiceId, avatarVoiceId} with preferredVoice/saveVoicePref in
+api.js; every voice select (produce panel, Voice Studio, Avatar Studio)
+defaults to the pinned id first and saves any manual change back as the
+new studio-wide default. Production data has
+voicePrefs.avatarVoiceId=dDFO3I2QaLuryXEunPHM set. The UI used to
+default the avatar voice to whatever sat first in the HeyGen list
+("Smalls - Voice 1"), which caused the two-voice Reel she caught.
+Renders before the fix carry wrong voices; HeyGen also kept FAILING
+avatar sections all day 2026-07-23 (fail-safe degraded them to narrated
+b-roll; check HeyGen credits before more avatar renders).
 
 **Deployed 2026-07-22 evening, second and third pushes (891a861, then
 cf001ee for avatar group labels), built fourth session and verified

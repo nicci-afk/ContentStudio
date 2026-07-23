@@ -490,12 +490,12 @@ app.post('/api/packages/:id/carousel-media', wrap(async (req, res) => {
   const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   const profile = stateStore.get().profile;
-  const { slides, mode } = await matchCarouselSlides({ profile, pkg, items: mediaStore.get().items });
+  const { slides, mode, error } = await matchCarouselSlides({ profile, pkg, items: mediaStore.get().items });
   let updated = null;
   packageStore.update((s) => ({
     items: s.items.map((p) => {
       if (p.id !== pkg.id) return p;
-      p.carouselPlan = { createdAt: new Date().toISOString(), mode, slides };
+      p.carouselPlan = { createdAt: new Date().toISOString(), mode, slides, error: error || undefined };
       const fields = p.platforms?.instagram_carousel?.fields;
       if (fields && req.body?.applyAlt !== false) {
         fields.alt_text = slides.map((sl) => `Slide ${sl.n}: ${sl.alt}`).join('\n');

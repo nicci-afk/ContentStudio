@@ -272,7 +272,10 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const savedDelivery = (() => { try { return localStorage.getItem('cs_delivery'); } catch { return null; } })();
   const scriptText = String(pkg.platforms?.[platformId]?.fields?.script || '');
   const hasOnCamera = /\[[^\]]*\b(?:talking[ -]?head|on[ -]?camera|to[ -]?camera|a[ -]?roll)\b[^\]]*\]|^\s*(?:TALKING[ -]?HEAD|ON[ -]?CAMERA|A[ -]?ROLL)\s*[:\-]/im.test(scriptText);
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: hasOnCamera ? 'sections' : 'open', avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
+  // Short-form platforms carry a videoSpec (duration cap + fast cuts) and
+  // default to the avatar carrying the whole video in one voice.
+  const videoSpec = appState.platforms.find((p) => p.id === platformId)?.videoSpec || null;
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: videoSpec ? 'all' : (hasOnCamera ? 'sections' : 'open'), avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -319,6 +322,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
           const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; } },
             ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
           const scopeSel = el('select', { class: 'input select', title: 'Where your avatar appears in the video', onchange: (ev) => { state.avatarScope = ev.target.value; } },
+            el('option', { value: 'all', selected: state.avatarScope === 'all' }, 'Avatar speaks the whole video (one voice)'),
             el('option', { value: 'sections', selected: state.avatarScope === 'sections' },
               hasOnCamera ? 'Avatar on every [ON CAMERA] section' : 'Avatar on on-camera sections (none marked in this script)'),
             el('option', { value: 'open', selected: state.avatarScope === 'open' }, 'Avatar on the open only'));
@@ -362,7 +366,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
                 el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
               ];
             })(),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
       }));
     } catch { /* list is best-effort */ }
   };
@@ -409,6 +413,8 @@ function producePanel(pkg, platformId, onPackageUpdated) {
     }
   };
 
+  const spokenWords = scriptText.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length;
+  const estSeconds = Math.round(spokenWords / 2.4);
   panel.append(
     el('div', { class: 'row spread' },
       el('span', { class: 'field-label' }, '🎬 Auto-produce this video'),
@@ -416,6 +422,10 @@ function producePanel(pkg, platformId, onPackageUpdated) {
     el('div', { class: 'row gap wrap' },
       voiceSelect, deliverySelect, orientationSelect, avatarToggle),
     avatarWrap,
+    videoSpec
+      ? el('p', { class: 'muted', style: 'margin:2px 0 6px' },
+          `This script reads about ${estSeconds}s spoken · the sweet spot here is ${videoSpec.targetSeconds}s and the cap is ${videoSpec.maxSeconds}s (anything longer trims automatically). Tighten the script field first for the strongest cut.`)
+      : null,
     el('button', { class: 'btn btn-primary', onclick: produce }, '🎬 Produce video'),
     result, renderList,
   );

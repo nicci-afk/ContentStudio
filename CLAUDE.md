@@ -400,6 +400,30 @@ newest render shows expanded, older cuts sit behind "Show N earlier
 renders". Verified locally end to end (network log: tab open fetches
 only posters; play fetches ?q=preview; second render collapses).
 
+**Industry respect incident and hardening (session 6, 2026-07-23):**
+the user caught "cesspool" in the long-form YouTube video ("the
+cesspool of generic bookings"). Her standing rule is BROADER than the
+old law 17 text: never anything negative about ANY part of the travel
+industry, including booking sites, listing platforms, OTAs, other
+advisors, or any way people book travel; differentiate only by
+describing her value. FIXED live via field edits (never regenerate):
+youtube_long.script now reads "That's the gap I built this to close",
+instagram_reel.caption now reads "I wanted advisors to hand their
+clients more than a generic booking, something with a real
+relationship behind it"; jsonld transcript rebuilt itself; zero
+occurrences remain anywhere in the package; score still 96.
+Prevention (built, tested locally): law 17 in lib/engine.js extended
+to every part of the industry with the derogatory-vocabulary ban and
+the differentiate-on-value rule, and a new industry_respect rubric
+check in lib/visibility.js (weight 10) fails the score on unambiguous
+slurs (cesspool, dumpster fire, scammy, rip-off, sleazy, shady,
+sketchy, predatory, soulless, race to the bottom, churn and burn).
+IMPORTANT: render 98a6532432f60e48 (261s, avatar cutout x3, chapters
+applied, rendered 2026-07-23 morning) SPEAKS the word at 1:23 with it
+burned into captions; it must be re-rendered with the fixed script
+before any YouTube upload. A re-render reuses cached narration for
+unchanged sections but resubmits all HeyGen avatar sections (credits).
+
 **Then, in order:** the user posts the Reel and uploads the long-form
 video to YouTube; when she shares the URL, build upgrade 3
 (published-URL registry: pkg.publishedUrls feeding llms.txt, jsonld

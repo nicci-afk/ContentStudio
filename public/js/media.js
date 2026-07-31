@@ -450,6 +450,12 @@ function mediaCard(item, refresh) {
             download: '',
             title: 'Download the full-size stored copy with a keyword filename. Pair it with the alt text above when posting: platforms strip embedded photo metadata, so the alt text field is what carries it.',
           }, '⬇ Download'),
+          item.kind === 'video' && item.hasOriginal ? el('a', {
+            class: 'btn btn-ghost btn-xs',
+            href: `/api/media/${item.id}/file/muted`,
+            download: '',
+            title: 'Same footage with audio removed — for silent autoplay or adding your own music',
+          }, '⬇ No sound') : null,
           el('button', {
             class: 'btn btn-ghost btn-xs', onclick: async () => {
               detail.replaceChildren(spinner('Analyzing…'));

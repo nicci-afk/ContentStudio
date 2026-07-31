@@ -232,6 +232,28 @@ app.get('/api/media/:id/file', (req, res) => {
   res.type('image/jpeg').send(buf);
 });
 
+// Muted video download: same original footage, audio track removed on the fly.
+// Only available for video items that have an original stored on disk.
+app.get('/api/media/:id/file/muted', (req, res) => {
+  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
+  if (!item || item.kind !== 'video') return res.status(404).end();
+  const original = mediaPath(item.id, 'original');
+  if (!fs.existsSync(original)) return res.status(404).end();
+  const slug = String(item.alt || item.caption || item.name || 'media')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'media';
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Content-Disposition', `attachment; filename="${slug}-muted.mp4"`);
+  const proc = spawn(ffmpegPath(), [
+    '-i', original,
+    '-c:v', 'copy', '-an',
+    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov',
+    'pipe:1',
+  ], { stdio: ['ignore', 'pipe', 'ignore'] });
+  proc.stdout.pipe(res);
+  res.on('close', () => proc.kill());
+  proc.on('error', () => { try { res.end(); } catch { /* ignore */ } });
+});
+
 // Original video upload: the browser streams the untouched file here after
 // import so Auto-Produce can cut real moving clips into b-roll. Streamed
 // straight to disk (never buffered in memory) with a hard size cap.

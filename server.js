@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 
@@ -25,7 +25,7 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview } = await import('./lib/render.js');
+const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
@@ -465,6 +465,25 @@ app.get('/api/render/:id/video', (req, res) => {
     else enqueuePreview(req.params.id); // stream full quality this visit, fast next visit
   }
   res.sendFile(file, RENDER_CACHE);
+});
+
+// Strip audio on the fly via ffmpeg — video codec copied losslessly, no re-encode.
+// Uses fragmented MP4 so the moov atom is at the front and the browser can start
+// receiving bytes immediately (no seek needed).
+app.get('/api/render/:id/video/muted', (req, res) => {
+  const full = renderFile(req.params.id, 'mp4');
+  if (!full) return res.status(404).end();
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Content-Disposition', 'attachment; filename="video-muted.mp4"');
+  const proc = spawn(ffmpegPath(), [
+    '-i', full,
+    '-c:v', 'copy', '-an',
+    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov',
+    'pipe:1',
+  ], { stdio: ['ignore', 'pipe', 'ignore'] });
+  proc.stdout.pipe(res);
+  res.on('close', () => proc.kill());
+  proc.on('error', () => { try { res.end(); } catch { /* ignore */ } });
 });
 
 app.get('/api/render/:id/poster', wrap(async (req, res) => {

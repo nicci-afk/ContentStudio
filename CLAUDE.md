@@ -790,6 +790,63 @@ to clear cross_surface, the only failing check. Consider an Offer price
 range on the Event. ANTHROPIC_MODEL_LIGHT=claude-haiku-4-5-20251001 in
 the Render env activates the cheap tier for utility calls.
 
+## Channel strategy + Travel GHR launch (2026-08-03, her decision)
+
+**One flagship channel per brand, to start:** Conscious Creator publishes
+long-form YouTube (rVG3I3usS9c already live); Travel GHR publishes a
+LinkedIn article. She keeps LinkedIn corporate-focused, so the Conscious
+Creator newsletter should NOT be a LinkedIn newsletter (a personal-profile
+newsletter notifies her corporate followers; a company-page one separates
+cleanly but reaches far fewer). Recommended instead: an owned email
+newsletter with a public archive on consciouscreator.app, delivering the
+Founding Collective membership the flyer already promises, since an owned
+archive is crawlable AND can carry JSON-LD (LinkedIn strips schema).
+Not built yet, awaiting her platform choice.
+
+**Travel GHR workspace (bb9470f36532761b) first package, live in
+production: eefa86e1b3805561, 96 AI-Dominant.** Topic "What does a
+corporate event travel advisor actually do?" (definitional authority),
+LinkedIn only to hold token spend down. Profile already had the brief,
+voice DNA, and a blocklist (Airbnb, VRBO, Expedia, Booking.com, budget,
+deal, discount, cheapest, bucket list, hidden gem, wanderlust, luxurious,
+trip of a lifetime). schemaType set to TravelAgency. Still missing:
+pillars/series (0) and media (0, so the article needs a cover image she
+supplies).
+
+Generated at 75, fixed to 96 by hand:
+- BLOCKLIST LEAK: "under budget pressure" reached the post and article
+  because it is HER OWN WORDING in profile.business.person.credentials.
+  Copy changed to "under real financial pressure". THE PROFILE STILL
+  SAYS "budget pressure" and will leak again on the next generation;
+  recommend editing the credentials field (or dropping "budget" from
+  the blocklist, her call).
+- INDUSTRY RESPECT, third instance: the draft had a section titled
+  "How Is This Different From a Regular Travel Agent?" opening "A travel
+  agent typically books a trip", plus a "The Trust Gap" passage asking
+  whether an advisor has "only ever seen the guest side of the desk".
+  Rewritten to contrast the WORK, not the people: "How Is This Different
+  From Booking a Trip?" and "What to Look For". The new
+  industry_respect_comparative check did not catch either, because they
+  disparage by sentence construction rather than by known phrase; the
+  rubric can only ever catch known patterns, so drafts still need a read.
+- Added "operating from Edwardsville, Illinois" (geo check) and changed
+  "15+ years" to "more than 15 years" so the stats check matches.
+- The AI-answer layer FAILED SILENTLY during generation (template FAQ
+  with [FILL], empty queryMap/citeLines/definition). Rebuilt via the
+  citations endpoint: 15 query phrasings, 3 cite lines, 4 real FAQ
+  answers, clean definition. Build de6dbc8 now records answerLayerError
+  on the package and surfaces it in AI Metadata so this is never silent
+  again, and clears it on a successful rebuild.
+- VERIFIED GROUNDED, nothing invented: CLIA/ASTA/Travel Leaders/Marriott
+  preferred agency, 15+ years front desk to GM, turnaround work, and the
+  five 2026 Orlando events (Creator Cut 100 attendees Feb 13, EMS Edition
+  65 attendees May 19, three Kha Ly MasterClass sessions, sixth booked
+  Sept 30 to Oct 6) all trace to her interview answers.
+
+NOTE: cross_surface stays red on any single-channel package (it wants 3
+live URLs). That is expected under a one-channel-per-brand strategy;
+adding the site page is the cheap way to clear it.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

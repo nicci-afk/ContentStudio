@@ -847,6 +847,30 @@ NOTE: cross_surface stays red on any single-channel package (it wants 3
 live URLs). That is expected under a one-channel-per-brand strategy;
 adding the site page is the cheap way to clear it.
 
+**Travel GHR media library loaded (2026-08-03):** 206 items, 111 images
+and 95 videos, ALL analyzed, ALL 95 videos carry their originals, 205
+have GPS and every one has a date. Roughly 2GB. This unlocks Auto-Produce
+video for Travel GHR (real moving b-roll, not just stills).
+
+**Attach-media gap found and closed (build fb15f3f):** media was only
+ever selected during generation, so importing photos AFTER generating
+left a finished package with no visuals and no remedy except
+regenerating, which would have destroyed every hand edit on the article.
+POST /api/packages/:id/media now attaches explicit picks or runs the AI
+selection over the analyzed library, takes alt text from each item's
+stored analysis (zero extra model calls), and rebuilds jsonld and score.
+Control sits in AI Metadata ("Pick media from my library"). Ran it on
+eefa86e1b3805561: 8 assets in a story arc (packed conference room hook,
+badge and capacity and catering and shuttle proof shots, an itinerary
+video, Nicci with her badge as the human moment, group dinner closer),
+8 ImageObject entries in the JSON-LD, still 96.
+
+**DISK WATCH:** 4.6GB free of 10.5GB after both libraries (Conscious
+Creator 2.4GB, Travel GHR 2.0GB). A render refuses under 1.5GB free, so
+there is room for now, but R2 media offload (phase 2 of backups, bucket
+and credentials already proven) is the real fix before the library grows
+much further.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

@@ -43,6 +43,23 @@ export function copyBtn(getText, label = 'Copy') {
   return el('button', { class: 'btn btn-ghost btn-xs', onclick: () => copyText(typeof getText === 'function' ? getText() : getText) }, label);
 }
 
+// Copies real rich text: the clipboard carries an HTML flavor alongside the
+// plain one, so a composer that understands formatting (a LinkedIn article,
+// a newsletter editor) keeps the heading hierarchy, bold, and lists instead
+// of receiving literal markdown characters. Falls back to plain text
+// wherever the richer clipboard API is unavailable.
+export async function copyRich(html, plain, label = 'Copied with formatting') {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([plain], { type: 'text/plain' }),
+    })]);
+    toast(`${label} ✓`);
+  } catch {
+    await copyText(plain, 'Copied as plain text');
+  }
+}
+
 export function field(labelText, input, hint) {
   return el('label', { class: 'field' },
     el('span', { class: 'field-label' }, labelText),

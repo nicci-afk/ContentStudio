@@ -7,7 +7,7 @@
 // and always stop short of posting, so the creator keeps the final click.
 
 import { api, appState } from './api.js';
-import { el, toast, spinner, copyBtn, emptyState } from './ui.js';
+import { el, toast, spinner, copyBtn, copyRich, emptyState } from './ui.js';
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
 
@@ -61,6 +61,41 @@ const LEVEL_LABEL = {
   2: 'Largest heading style',
   3: 'Next heading size down',
 };
+
+// Markdown to HTML, so the clipboard can carry real formatting into an
+// editor that has its own styles. Deliberately small: the article grammar
+// ContentStudio emits is headings, paragraphs, bold, and bullets.
+function mdToHtml(md) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (s) => esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  const out = [];
+  let list = null;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.trimEnd();
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { closeList(); const lvl = Math.min(6, h[1].length); out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`); continue; }
+    const ul = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (ul) { if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(ul[1])}</li>`); continue; }
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (ol) { if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(ol[1])}</li>`); continue; }
+    if (!line.trim()) { closeList(); continue; }
+    closeList();
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  closeList();
+  return out.join('\n');
+}
+
+// The plain-text flavor drops the markdown characters too, so even a
+// composer that ignores HTML never receives a literal "## Heading".
+function mdToPlain(md) {
+  return String(md || '').split('\n')
+    .map((l) => l.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '').replace(/^\s*[-*•]\s+/, '• '))
+    .join('\n');
+}
 
 export function renderPublish(root, params = null) {
   const pkgId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
@@ -130,6 +165,19 @@ function mediaLinks(pkg, platformId, spec, renders) {
     for (const s of pkg.carouselPlan.slides) {
       links.push({ label: `⬇ slide ${s.n} image`, href: `/api/media/${s.mediaId}/file`, download: `slide-${s.n}.jpg` });
     }
+    return links;
+  }
+  // Every other surface still needs a picture: an article cover, a post
+  // image. The package's attached media is offered in selection order, so
+  // the first one is the AI's pick for the strongest opening shot.
+  for (const [i, id] of (pkg.mediaIds || []).slice(0, 8).entries()) {
+    const alt = pkg.altTexts?.[id] || '';
+    links.push({
+      label: `⬇ ${i === 0 ? 'cover image' : `image ${i + 1}`}${alt ? `: ${alt.slice(0, 46)}` : ''}`,
+      href: `/api/media/${id}/file`,
+      download: `${slug}-${i + 1}.jpg`,
+      alt,
+    });
   }
   return links;
 }
@@ -145,7 +193,13 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
     fields.push(el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' },
         el('span', { class: 'field-label' }, f.label),
-        copyBtn(value)),
+        el('div', { class: 'row gap' },
+          plan.length ? el('button', {
+            class: 'btn btn-primary btn-xs',
+            title: 'Copies with real headings and bold, so the editor keeps the structure instead of showing # characters',
+            onclick: () => copyRich(mdToHtml(value), mdToPlain(value)),
+          }, 'Copy formatted') : null,
+          copyBtn(value, plan.length ? 'Copy raw' : 'Copy'))),
       plan.length ? el('details', { class: 'asset-field', style: 'margin:6px 0' },
         el('summary', { class: 'field-label' }, `Heading structure to apply in the editor (${plan.length} headings)`),
         el('p', { class: 'muted', style: 'margin:6px 0' },
@@ -189,8 +243,10 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
       el('span', { class: 'field-label' }, 'Media to attach (download first, then attach in the composer)'),
       el('div', { class: 'row gap wrap', style: 'margin-top:6px' },
         media.map((m) => m.href
-          ? el('a', { class: 'btn btn-ghost btn-xs', href: m.href, download: m.download }, m.label)
-          : el('span', { class: 'warn' }, m.label)))) : null,
+          ? el('a', { class: 'btn btn-ghost btn-xs', href: m.href, download: m.download, title: m.alt || undefined }, m.label)
+          : el('span', { class: 'warn' }, m.label))),
+      media.some((m) => m.alt) ? el('p', { class: 'muted', style: 'margin:6px 0 0' },
+        'Platforms strip embedded photo metadata on upload, so paste the alt text into the composer\'s own alt field. Hover a button to see its alt text, or copy them all from the AI Metadata tab.') : null) : null,
     ...fields,
     el('div', { class: 'asset-field' },
       el('span', { class: 'field-label' }, posted ? 'Update the live URL' : 'After posting'),

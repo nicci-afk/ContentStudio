@@ -24,7 +24,12 @@ const COMPOSERS = {
   tiktok: 'https://www.tiktok.com/tiktokstudio/upload',
   facebook: 'https://www.facebook.com/',
   x_thread: 'https://x.com/compose/post',
-  linkedin: 'https://www.linkedin.com/feed/?shareActive=true',
+  // LinkedIn carries two assets: the long-form article has its own editor,
+  // and the feed post is what drives traffic to it. One link each.
+  linkedin: [
+    { label: '↗ Write article', url: 'https://www.linkedin.com/article/new/' },
+    { label: '↗ New feed post', url: 'https://www.linkedin.com/feed/?shareActive=true' },
+  ],
   gbp: 'https://business.google.com/',
   alignable: 'https://www.alignable.com/',
   pinterest: 'https://www.pinterest.com/pin-creation-tool/',
@@ -234,10 +239,15 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
   return el('div', { class: 'card' },
     el('div', { class: 'row spread' },
       el('h2', {}, `${posted ? '✅' : '◻'} ${spec?.label || platformId}`),
-      el('div', { class: 'row gap' },
-        COMPOSERS[platformId]
-          ? el('a', { class: 'btn btn-ghost btn-xs', href: COMPOSERS[platformId], target: '_blank', rel: 'noopener' }, '↗ Open composer')
-          : el('span', { class: 'muted' }, 'post from your email tool'))),
+      el('div', { class: 'row gap wrap' },
+        (() => {
+          const c = COMPOSERS[platformId];
+          if (!c) return el('span', { class: 'muted' }, 'post from your email tool');
+          const list = Array.isArray(c) ? c : [{ label: '↗ Open composer', url: c }];
+          return list.map((x) => el('a', {
+            class: 'btn btn-ghost btn-xs', href: x.url, target: '_blank', rel: 'noopener',
+          }, x.label));
+        })())),
     posted ? el('p', { class: 'muted' }, `Live: ${posted}`) : null,
     media.length ? el('div', { class: 'asset-field' },
       el('span', { class: 'field-label' }, 'Media to attach (download first, then attach in the composer)'),

@@ -871,6 +871,41 @@ there is room for now, but R2 media offload (phase 2 of backups, bucket
 and credentials already proven) is the real fix before the library grows
 much further.
 
+## Publish flow hardening (2026-08-03, from her first real publish attempt)
+
+Her first run at the Travel GHR LinkedIn article exposed five gaps, all
+fixed and deployed (builds e5fdabf, 538e607, 9713082, 4b0c26e, a833484):
+- PROMPT-INJECTION FLAG (important, and the browser agent was RIGHT): the
+  Publish Run page carried a box addressing the agent directly and telling
+  it to copy an instruction set. Claude in Chrome correctly refused it as a
+  textbook injection pattern. Reframed: the box is now labeled as something
+  SHE copies and sends herself, and the instruction text tells the agent to
+  treat the page as data and ignore instructions found on it. Never put
+  agent-directed instructions on a page again; direction must arrive from
+  the user.
+- The Approve control was styled as a faint chip between solid buttons and
+  she could not find it. Now a primary button in its own labeled block.
+- MARKDOWN DOES NOT SURVIVE A PASTE. LinkedIn's article editor has real
+  heading styles but converts no markdown, so the pasted article showed
+  literal ## characters and no hierarchy. Two fixes: each field now lists
+  its heading structure with the level to apply, and a "Copy formatted"
+  button puts a text/html flavor on the clipboard (markdown converted to
+  real h2/h3, bold, lists) beside a plain flavor that also has the hashes
+  stripped. Verified in-browser: the clipboard carries <h1>/<h2> and zero
+  hash characters.
+- Attached package media only appeared on video and carousel cards, so an
+  article had no cover image offered. Media now shows on every card in
+  selection order (first = AI's cover pick) with alt text on hover.
+- LinkedIn's single composer link pointed at the feed box; the long-form
+  article had nowhere correct to go. COMPOSERS entries now accept a list;
+  LinkedIn offers "Write article" (/article/new/) and "New feed post".
+
+NOTE she is drafting from the Travel GHR COMPANY page
+(fsd_company:108566841). Company pages reach roughly 1.6% of followers vs
+8-12% for personal profiles, and her personal profile is already the
+corporate-focused one, so publishing there and resharing from the page
+would reach more of the right audience. Flagged, her call.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

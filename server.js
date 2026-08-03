@@ -524,6 +524,38 @@ app.post('/api/packages/:id/citations', wrap(async (req, res) => {
   res.json({ package: updated });
 }));
 
+// Hand-edit the AI-answer layer. Generation gets it close; the creator's
+// judgment is final, and until now the answer layer was the one surface
+// with no in-place editing (the PATCH route only reaches platform fields).
+app.patch('/api/packages/:id/citations', (req, res) => {
+  const { faq, queryMap, citeLines, definition, quotable } = req.body || {};
+  const profile = stateStore.get().profile;
+  const cleanList = (v, cap) => (Array.isArray(v)
+    ? v.map((s) => String(s).trim()).filter(Boolean).slice(0, cap)
+    : String(v || '').split('\n').map((s) => s.replace(/^[-•*]\s*/, '').trim()).filter(Boolean).slice(0, cap));
+  let pkg = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      if (Array.isArray(faq)) {
+        p.faq = faq
+          .map((f) => ({ q: String(f?.q || '').trim(), a: String(f?.a || '').trim() }))
+          .filter((f) => f.q && f.a)
+          .slice(0, 8);
+      }
+      if (queryMap != null) p.queryMap = cleanList(queryMap, 20);
+      if (citeLines != null) p.citeLines = cleanList(citeLines, 6);
+      if (definition != null) p.definition = String(definition).trim() || null;
+      if (quotable != null) p.quotable = String(quotable).trim() || null;
+      p.jsonld = buildJsonLd(p, profile);
+      p.visibility = scorePackage(p, profile);
+      return (pkg = p);
+    }),
+  }));
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  res.json({ package: pkg });
+});
+
 // Per-package event facts (the retreat IS an event): dates, place, price.
 // Emits Event JSON-LD and the business block's makesOffer.
 app.post('/api/packages/:id/event', (req, res) => {

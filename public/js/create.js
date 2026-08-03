@@ -674,6 +674,86 @@ function eventBlock(pkg, onPackageUpdated) {
     el('div', { class: 'row gap wrap', style: 'margin-top:6px' }, Object.values(f)));
 }
 
+// In-place editing for the answer layer. Generation gets it close; her
+// judgment is final, and these fields feed FAQPage schema directly.
+function editableList(pkg, label, key, cap, onPackageUpdated) {
+  const values = pkg[key] || [];
+  if (!values.length) return null;
+  const wrap = el('div', { class: 'asset-field' });
+  const draw = () => {
+    wrap.replaceChildren(
+      el('div', { class: 'row spread' },
+        el('span', { class: 'field-label' }, label),
+        el('div', { class: 'row gap' },
+          el('button', {
+            class: 'btn btn-ghost btn-xs', onclick: () => {
+              const ta = textArea({ rows: Math.min(16, (pkg[key] || []).length + 2) });
+              ta.value = (pkg[key] || []).join('\n');
+              const save = el('button', {
+                class: 'btn btn-primary btn-xs', onclick: async () => {
+                  try {
+                    const { package: updated } = await api.editCitations(pkg.id, { [key]: ta.value });
+                    Object.assign(pkg, updated);
+                    toast('Saved · rescored');
+                    onPackageUpdated?.();
+                  } catch (err) { toast(err.message, 'err'); }
+                },
+              }, 'Save');
+              wrap.replaceChildren(el('span', { class: 'field-label' }, `${label} (one per line)`), ta,
+                el('div', { class: 'row gap', style: 'margin-top:8px' }, save,
+                  el('button', { class: 'btn btn-ghost btn-xs', onclick: draw }, 'Cancel')));
+            },
+          }, '✎ Edit'),
+          copyBtn((pkg[key] || []).join('\n')))),
+      key === 'queryMap'
+        ? el('div', { class: 'chip-row' }, (pkg[key] || []).map((q) => el('span', { class: 'chip' }, q)))
+        : el('ul', { class: 'plain-list' }, (pkg[key] || []).map((c) => el('li', {}, c))));
+  };
+  draw();
+  return wrap;
+}
+
+function editableFaq(pkg, onPackageUpdated) {
+  if (!(pkg.faq || []).length) return null;
+  const wrap = el('div', { class: 'asset-field' });
+  const draw = () => {
+    wrap.replaceChildren(
+      el('div', { class: 'row spread' },
+        el('span', { class: 'field-label' }, 'FAQ (AI-answer layer · becomes FAQPage schema)'),
+        el('div', { class: 'row gap' },
+          el('button', {
+            class: 'btn btn-ghost btn-xs', onclick: () => {
+              const rows = (pkg.faq || []).map((f) => {
+                const q = textInput({ value: f.q, style: 'width:100%' });
+                const a = textArea({ rows: 3 });
+                a.value = f.a;
+                return { q, a, node: el('div', { class: 'faq-pair' }, q, a) };
+              });
+              const save = el('button', {
+                class: 'btn btn-primary btn-xs', onclick: async () => {
+                  try {
+                    const faq = rows.map((r) => ({ q: r.q.value, a: r.a.value }));
+                    const { package: updated } = await api.editCitations(pkg.id, { faq });
+                    Object.assign(pkg, updated);
+                    toast('FAQ saved · schema and score rebuilt');
+                    onPackageUpdated?.();
+                  } catch (err) { toast(err.message, 'err'); }
+                },
+              }, 'Save FAQ');
+              wrap.replaceChildren(
+                el('span', { class: 'field-label' }, 'FAQ (clear a question to remove that pair)'),
+                ...rows.map((r) => r.node),
+                el('div', { class: 'row gap', style: 'margin-top:8px' }, save,
+                  el('button', { class: 'btn btn-ghost btn-xs', onclick: draw }, 'Cancel')));
+            },
+          }, '✎ Edit'),
+          copyBtn((pkg.faq || []).map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n\n')))),
+      ...(pkg.faq || []).map((f) => el('div', { class: 'faq-pair' }, el('strong', {}, f.q), el('p', {}, f.a))));
+  };
+  draw();
+  return wrap;
+}
+
 function metadataTab(pkg, onPackageUpdated) {
   const jsonldText = Object.entries(pkg.jsonld || {})
     .map(([k, v]) => `<!-- ${k} -->\n<script type="application/ld+json">\n${JSON.stringify(v, null, 2)}\n</script>`)
@@ -684,12 +764,8 @@ function metadataTab(pkg, onPackageUpdated) {
     pkg.definition ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Your definition (own the answer)'), copyBtn(pkg.definition)),
       el('blockquote', { class: 'sample' }, pkg.definition)) : null,
-    (pkg.citeLines || []).length ? el('div', { class: 'asset-field' },
-      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Attribution-ready claim lines'), copyBtn(pkg.citeLines.join('\n'))),
-      el('ul', { class: 'plain-list' }, pkg.citeLines.map((c) => el('li', {}, c)))) : null,
-    (pkg.queryMap || []).length ? el('div', { class: 'asset-field' },
-      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Query map (phrasings this package should win)'), copyBtn(pkg.queryMap.join('\n'))),
-      el('div', { class: 'chip-row' }, pkg.queryMap.map((q) => el('span', { class: 'chip' }, q)))) : null,
+    editableList(pkg, 'Attribution-ready claim lines', 'citeLines', 6, onPackageUpdated),
+    editableList(pkg, 'Query map (phrasings this package should win)', 'queryMap', 20, onPackageUpdated),
     (pkg.mediaIds || []).length ? el('div', { class: 'asset-field' },
       el('span', { class: 'field-label' }, `Media in this package${pkg.mediaSelectionMode === 'ai' ? ' (AI-selected)' : ''}`),
       el('div', { class: 'mini-media-row' }, pkg.mediaIds.map((id) => el('div', { class: 'pick-cell' },
@@ -698,9 +774,7 @@ function metadataTab(pkg, onPackageUpdated) {
     Object.keys(pkg.links || {}).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Tracked CTA links (one per platform)'), copyBtn(Object.entries(pkg.links).map(([k, v]) => `${k}: ${v}`).join('\n'))),
       el('ul', { class: 'plain-list' }, Object.entries(pkg.links).map(([k, v]) => el('li', {}, `${k} → ${v}`)))) : null,
-    (pkg.faq || []).length ? el('div', { class: 'asset-field' },
-      el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'FAQ (AI-answer layer)'), copyBtn(pkg.faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n\n'))),
-      pkg.faq.map((f) => el('div', { class: 'faq-pair' }, el('strong', {}, f.q), el('p', {}, f.a)))) : null,
+    editableFaq(pkg, onPackageUpdated),
     pkg.keywords?.length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Keywords & retrieval phrases'), copyBtn(pkg.keywords.join(', '))),
       el('div', { class: 'chip-row' }, pkg.keywords.map((k) => el('span', { class: 'chip' }, k)))) : null,

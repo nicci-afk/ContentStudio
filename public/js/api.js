@@ -61,6 +61,7 @@ export const api = {
   approvePlatform: (id, platformId, approved) => send('POST', `/api/packages/${id}/approve`, { platformId, approved }),
   setPublishedUrl: (id, platformId, url) => send('POST', `/api/packages/${id}/published`, { platformId, url }),
   regenCitations: (id) => send('POST', `/api/packages/${id}/citations`, {}),
+  editCitations: (id, patch) => send('PATCH', `/api/packages/${id}/citations`, patch),
   setPackageEvent: (id, event) => send('POST', `/api/packages/${id}/event`, event),
   render: (body) => send('POST', '/api/render', body),
   renderStatus: (id) => get(`/api/render/${id}`),

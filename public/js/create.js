@@ -201,6 +201,7 @@ function renderPackage(pkg, onDelete) {
           copyBtn(pkg.links[active])),
         el('pre', { class: 'asset-value code' }, pkg.links[active])));
     }
+    body.append(approvalRow(pkg, active, () => { drawTabs(); drawBody(); }));
     body.append(publishedUrlRow(pkg, active, () => { drawTabs(); drawBody(); }));
     for (const f of spec?.fields || Object.keys(asset.fields).map((k) => ({ key: k, label: k }))) {
       const value = fieldText(asset.fields[f.key]);
@@ -260,12 +261,31 @@ function renderPackage(pkg, onDelete) {
         el('p', { class: 'muted' }, `${new Date(pkg.createdAt).toLocaleString()}${pkg.mode === 'template' ? ' · template mode (add Claude key for full AI writing)' : ''}`)),
       el('div', { class: 'row gap' },
         pkg.visibility ? scoreBadge(pkg.visibility.score, pkg.visibility.grade) : null,
+        el('a', { class: 'btn btn-primary btn-xs', href: `#/publish?pkg=${pkg.id}` }, '📤 Publish Run'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.md`, packageMarkdown(pkg), 'text/markdown') }, '⬇ Publish kit (.md)'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`website-kit-${pkg.id}.md`, websiteKit(pkg), 'text/markdown') }, '⬇ Website kit (Lovable)'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.json`, JSON.stringify(pkg, null, 2), 'application/json') }, '⬇ JSON'),
         el('button', { class: 'btn btn-danger btn-xs', onclick: onDelete }, 'Delete'))),
     pkg.quotable ? el('blockquote', { class: 'sample' }, `“${pkg.quotable}”`) : null,
     tabRow, body);
+}
+
+// Draft/Approved gate per platform: the Publish Run page only exposes
+// approved assets, so nothing unreviewed can ever reach a composer.
+function approvalRow(pkg, platformId, onPackageUpdated) {
+  const approved = !!pkg.approvals?.[platformId]?.approved;
+  const chip = el('button', {
+    class: `chip chip-toggle ${approved ? 'on' : ''}`,
+    onclick: async () => {
+      try {
+        const { package: updated } = await api.approvePlatform(pkg.id, platformId, !approved);
+        Object.assign(pkg, updated);
+        toast(!approved ? 'Approved · it now appears on the Publish Run page' : 'Back to draft');
+        onPackageUpdated?.();
+      } catch (err) { toast(err.message, 'err'); }
+    },
+  }, approved ? '✓ Approved for publishing' : 'Approve for publishing');
+  return el('div', { class: 'row gap', style: 'margin:4px 0 8px' }, chip);
 }
 
 // After posting, the live link lands here. It feeds llms.txt canonical

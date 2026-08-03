@@ -654,6 +654,39 @@ UI smoke clean (no console errors, no stray null text).
 6. Voice: pin whichever ElevenLabs clone she confirms as THE voice; the
    next avatar render then speaks entirely in it (open beats included).
 
+**Publish workflow (built 2026-08-03, second push of session 7; user
+directives: works across ALL brands/workspaces — she added a Travel GHR
+corporate-travel workspace and more brands are coming; NEVER propose
+Zapier, she rejected it; token/credit frugality is a standing
+requirement):**
+- Per-platform approval gate: POST /api/packages/:id/approve stores
+  pkg.approvals; an "Approve for publishing" toggle sits on every
+  platform tab. Nothing unapproved reaches the publish flow.
+- Publish Run page (#/publish?pkg=..., public/js/publish.js, hidden from
+  the nav, opened from the package header button): approved assets only,
+  in day-one posting order, each card carrying the composer deep link,
+  exact field text with copy buttons, media downloads (newest finished
+  render + SRT for video platforms, carousel slide files in order), and
+  a live-URL box that writes the published registry (llms.txt, JSON-LD,
+  cross_surface update on paste). Fully workspace-scoped, so every brand
+  gets it automatically.
+- The posting model is assisted, not autonomous: the page carries a
+  copyable instruction for the Claude in Chrome extension that fills
+  each platform's composer verbatim from the card and ALWAYS stops
+  before posting. The creator attaches media (the OS file picker cannot
+  be driven by an extension) and clicks Post herself, then pastes the
+  live URL back. Platform APIs/OAuth deliberately avoided.
+- Token economy: claude() gained tier 'light' (used by chapter titling)
+  that routes to ANTHROPIC_MODEL_LIGHT when that env var is set; content
+  generation always stays on the main model. To activate, set
+  ANTHROPIC_MODEL_LIGHT=claude-haiku-4-5-20251001 in the Render env.
+- Standards watch: a monthly Routine (created 2026-08-03, fires a fresh
+  session on the 1st, 14:00 UTC) researches platform / E-E-A-T / AI
+  answer-engine standard changes, writes docs/STANDARDS-WATCH.md,
+  applies safe spec-text updates to lib/platforms.js on the dev branch,
+  and never deploys. Manage it via the claude-code-remote trigger tools
+  (list_triggers / update_trigger / delete_trigger).
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

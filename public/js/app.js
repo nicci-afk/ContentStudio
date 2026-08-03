@@ -5,6 +5,7 @@ import { renderLibrary } from './media.js';
 import { renderStrategy } from './strategy.js';
 import { renderCreate } from './create.js';
 import { renderVoiceStudio, renderAvatarStudio } from './studios.js';
+import { renderPublish } from './publish.js';
 
 const ROUTES = [
   { path: 'dashboard', label: 'Dashboard', icon: '◈', render: renderDashboard },
@@ -15,6 +16,8 @@ const ROUTES = [
   { path: 'create', label: 'Create', icon: '⚡', render: renderCreate },
   { path: 'voice-studio', label: 'Voice Studio', icon: '🎙', render: renderVoiceStudio },
   { path: 'avatar-studio', label: 'Avatar Studio', icon: '🎬', render: renderAvatarStudio },
+  // Reached from a package's "Publish Run" button, not the nav.
+  { path: 'publish', label: 'Publish Run', icon: '📤', render: renderPublish, hidden: true },
 ];
 
 function currentPath() {
@@ -63,7 +66,7 @@ function renderNav() {
         el('span', { class: 'brand-sub' }, 'AI Visibility Engine'))),
     workspaceSwitcher(),
     el('div', { class: 'nav-links' },
-      ROUTES.map((r) => el('a', {
+      ROUTES.filter((r) => !r.hidden).map((r) => el('a', {
         class: `nav-link ${r.path === path ? 'active' : ''}`,
         href: `#/${r.path}`,
       }, el('span', { class: 'nav-icon' }, r.icon), el('span', { class: 'nav-label' }, r.label)))),

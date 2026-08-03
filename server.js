@@ -446,6 +446,27 @@ app.patch('/api/packages/:id', (req, res) => {
   res.json({ package: pkg });
 });
 
+// Per-platform approval: an asset is Draft until the creator approves it,
+// and the Publish Run page only ever exposes approved assets. This is the
+// human gate in front of any assisted posting flow.
+app.post('/api/packages/:id/approve', (req, res) => {
+  const { platformId, approved } = req.body || {};
+  if (!platformId) return res.status(400).json({ error: 'platformId required' });
+  let pkg = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      if (!p.platforms?.[platformId]) return p;
+      p.approvals = { ...(p.approvals || {}) };
+      if (approved) p.approvals[platformId] = { approved: true, at: new Date().toISOString() };
+      else delete p.approvals[platformId];
+      return (pkg = p);
+    }),
+  }));
+  if (!pkg) return res.status(404).json({ error: 'unknown package/platform' });
+  res.json({ package: pkg });
+});
+
 // Published-URL registry: where each asset actually went live. Feeds
 // llms.txt canonical URLs, JSON-LD url/sameAs/SeekToAction, and the
 // cross_surface check (which counts live URLs, not drafts).

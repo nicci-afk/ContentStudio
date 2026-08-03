@@ -635,6 +635,10 @@ function citationBlock(pkg, onPackageUpdated) {
     el('div', { class: 'row spread' },
       el('span', { class: 'field-label' }, `AI-answer layer · ${status}`),
       btn),
+    pkg.answerLayerError
+      ? el('p', { class: 'warn', style: 'margin:6px 0 0' },
+          `The answer layer did not generate with this package (${pkg.answerLayerError}). Rebuild it here.`)
+      : null,
     el('p', { class: 'muted', style: 'margin:6px 0 0' },
       'Regenerates the query map, FAQ answers, and cite lines using the real facts already edited into this package. Answers that are already real are kept; only the gaps rebuild.'),
     prog);

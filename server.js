@@ -516,6 +516,7 @@ app.post('/api/packages/:id/citations', wrap(async (req, res) => {
       p.definition = p.definition || meta.definition || null;
       p.quotable = p.quotable || meta.quotable || null;
       p.citationsAt = new Date().toISOString();
+      delete p.answerLayerError;
       p.jsonld = buildJsonLd(p, profile);
       p.visibility = scorePackage(p, profile);
       return (updated = p);

@@ -274,8 +274,8 @@ function renderPackage(pkg, onDelete) {
 // approved assets, so nothing unreviewed can ever reach a composer.
 function approvalRow(pkg, platformId, onPackageUpdated) {
   const approved = !!pkg.approvals?.[platformId]?.approved;
-  const chip = el('button', {
-    class: `chip chip-toggle ${approved ? 'on' : ''}`,
+  const btn = el('button', {
+    class: `btn ${approved ? 'btn-ghost' : 'btn-primary'} btn-xs`,
     onclick: async () => {
       try {
         const { package: updated } = await api.approvePlatform(pkg.id, platformId, !approved);
@@ -284,8 +284,15 @@ function approvalRow(pkg, platformId, onPackageUpdated) {
         onPackageUpdated?.();
       } catch (err) { toast(err.message, 'err'); }
     },
-  }, approved ? '✓ Approved for publishing' : 'Approve for publishing');
-  return el('div', { class: 'row gap', style: 'margin:4px 0 8px' }, chip);
+  }, approved ? 'Move back to draft' : '✓ Approve for publishing');
+  return el('div', { class: 'asset-field' },
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' }, approved ? '✅ Approved for publishing' : 'Approval (needed before this can be published)'),
+      btn),
+    el('p', { class: 'muted', style: 'margin:6px 0 0' },
+      approved
+        ? 'This asset is on the Publish Run page, in posting order, with its composer link and media ready.'
+        : 'Read the copy below first. Approving sends this asset to the Publish Run page; nothing unapproved can be published.'));
 }
 
 // After posting, the live link lands here. It feeds llms.txt canonical

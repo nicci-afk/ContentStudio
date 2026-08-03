@@ -21,12 +21,13 @@ const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile,
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
-const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, ProviderError } =
+const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError } =
   await import('./lib/providers.js');
-const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides } =
+const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath } = await import('./lib/render.js');
+const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
+const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
@@ -410,6 +411,22 @@ app.get('/api/packages/:id', (req, res) => {
   res.json({ package: pkg });
 });
 
+// Hand-polished chapter titles flow back into the render record (and from
+// there into the VideoObject hasPart Clip names) whenever the chapters
+// field is edited: lines are matched to the recorded chapter starts.
+function syncChapterTitles(pkg, platformId, value) {
+  const rec = pkg.renders?.[platformId];
+  if (!rec?.chapters?.length) return;
+  const lines = String(value || '').split('\n').map((l) => {
+    const m = l.match(/^\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s+(.+?)\s*$/);
+    return m ? { start: (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]), title: m[4] } : null;
+  }).filter(Boolean);
+  for (const c of rec.chapters) {
+    const hit = lines.find((l) => Math.abs(l.start - c.start) <= 2);
+    if (hit) c.title = hit.title;
+  }
+}
+
 app.patch('/api/packages/:id', (req, res) => {
   const { platformId, field, value } = req.body || {};
   const profile = stateStore.get().profile;
@@ -419,12 +436,94 @@ app.patch('/api/packages/:id', (req, res) => {
       if (p.id !== req.params.id) return p;
       if (!p.platforms?.[platformId]?.fields || typeof field !== 'string') return p;
       p.platforms[platformId].fields[field] = value;
+      if (field === 'chapters') syncChapterTitles(p, platformId, value);
       p.jsonld = buildJsonLd(p, profile);
       p.visibility = scorePackage(p, profile);
       return (pkg = p);
     }),
   }));
   if (!pkg) return res.status(404).json({ error: 'unknown package/platform/field' });
+  res.json({ package: pkg });
+});
+
+// Published-URL registry: where each asset actually went live. Feeds
+// llms.txt canonical URLs, JSON-LD url/sameAs/SeekToAction, and the
+// cross_surface check (which counts live URLs, not drafts).
+app.post('/api/packages/:id/published', (req, res) => {
+  const { platformId, url } = req.body || {};
+  if (!platformId) return res.status(400).json({ error: 'platformId required' });
+  const u = String(url || '').trim();
+  if (u && !/^https?:\/\/\S+$/i.test(u)) return res.status(400).json({ error: 'the URL must start with http(s)://' });
+  const profile = stateStore.get().profile;
+  let pkg = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      p.publishedUrls = { ...(p.publishedUrls || {}) };
+      if (u) p.publishedUrls[platformId] = u;
+      else delete p.publishedUrls[platformId];
+      p.jsonld = buildJsonLd(p, profile);
+      p.visibility = scorePackage(p, profile);
+      return (pkg = p);
+    }),
+  }));
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  res.json({ package: pkg });
+});
+
+// Citation-layer regenerate: rebuilds queryMap/FAQ/citeLines/keywords from
+// the package's finished copy. Platform fields are never touched; FAQ
+// answers that are already real (no [FILL]) are kept.
+app.post('/api/packages/:id/citations', wrap(async (req, res) => {
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const profile = stateStore.get().profile;
+  const meta = await regenerateCitations({ profile, pkg });
+  let updated = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== pkg.id) return p;
+      const kept = (p.faq || []).filter((f) => f?.a && !/\[FILL/i.test(f.a));
+      const keptQs = new Set(kept.map((f) => String(f.q).toLowerCase().replace(/\W+/g, ' ').trim()));
+      const fresh = (meta.faq || []).filter((f) => f?.q && f?.a
+        && !keptQs.has(String(f.q).toLowerCase().replace(/\W+/g, ' ').trim()));
+      p.faq = [...kept, ...fresh].slice(0, 6);
+      if (meta.queryMap?.length) p.queryMap = meta.queryMap;
+      if (meta.citeLines?.length) p.citeLines = meta.citeLines;
+      if (meta.keywords?.length) p.keywords = meta.keywords;
+      if (meta.entities?.length) p.entities = meta.entities;
+      p.definition = p.definition || meta.definition || null;
+      p.quotable = p.quotable || meta.quotable || null;
+      p.citationsAt = new Date().toISOString();
+      p.jsonld = buildJsonLd(p, profile);
+      p.visibility = scorePackage(p, profile);
+      return (updated = p);
+    }),
+  }));
+  res.json({ package: updated });
+}));
+
+// Per-package event facts (the retreat IS an event): dates, place, price.
+// Emits Event JSON-LD and the business block's makesOffer.
+app.post('/api/packages/:id/event', (req, res) => {
+  const allowed = ['name', 'startDate', 'endDate', 'locationName', 'address', 'price', 'currency', 'url', 'description'];
+  const event = {};
+  for (const k of allowed) {
+    const v = req.body?.[k];
+    if (v != null && String(v).trim()) event[k] = String(v).trim().slice(0, 600);
+  }
+  const profile = stateStore.get().profile;
+  let pkg = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      p.event = Object.keys(event).length ? event : undefined;
+      p.jsonld = buildJsonLd(p, profile);
+      p.visibility = scorePackage(p, profile);
+      return (pkg = p);
+    }),
+  }));
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
   res.json({ package: pkg });
 });
 
@@ -524,6 +623,27 @@ app.get('/api/packages/:id/renders', (req, res) => {
   res.json({ items: listRenders(req.params.id) });
 });
 
+// Chapter-to-clips: cut every chapter of a finished render into a vertical
+// 9:16 clip with its caption window re-burned. Local ffmpeg only — no
+// provider spend.
+app.post('/api/render/:id/clips', wrap(async (req, res) => {
+  res.json({ jobId: startClipsJob(req.params.id) });
+}));
+
+app.get('/api/render/clips/:jobId', (req, res) => {
+  const job = clipsJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'unknown clips job' });
+  res.json(job);
+});
+
+app.get('/api/render/:id/clip/:n', (req, res) => {
+  const n = Number(req.params.n);
+  const file = Number.isInteger(n) && n > 0 ? renderFile(req.params.id, `clip-${n}.mp4`) : null;
+  if (!file) return res.status(404).end();
+  res.set('Content-Disposition', `attachment; filename="chapter-${n}-clip.mp4"`);
+  res.sendFile(file, RENDER_CACHE);
+});
+
 // AI-match library assets to the carousel's numbered slides, store the
 // ordered plan on the package, and (unless applyAlt is false) write the
 // per-slide alt text into the carousel's alt_text field.
@@ -556,6 +676,13 @@ app.get('/api/storage', (req, res) => res.json(storageReport(activeRenderIds()))
 
 app.post('/api/storage/cleanup', (req, res) => res.json(cleanupStorage(activeRenderIds())));
 
+// Off-site backups (Cloudflare R2 / any S3-compatible bucket): status and a
+// manual run. The schedule runs daily on its own once the R2_* env vars
+// exist.
+app.get('/api/backup', (req, res) => res.json(backupStatus()));
+
+app.post('/api/backup', wrap(async (req, res) => res.json(await runBackup())));
+
 app.post('/api/storage/renders/delete', (req, res) => {
   const result = deleteRender(req.body?.workspaceId, req.body?.renderId, activeRenderIds());
   if (result.error) return res.status(400).json(result);
@@ -583,6 +710,7 @@ app.post('/api/voice/tts', wrap(async (req, res) => {
 
 app.get('/api/avatar/avatars', wrap(async (req, res) => res.json({ avatars: await heygenAvatars() })));
 app.get('/api/avatar/voices', wrap(async (req, res) => res.json({ voices: await heygenVoices() })));
+app.get('/api/avatar/quota', wrap(async (req, res) => res.json(await heygenQuota())));
 
 app.post('/api/avatar/generate', wrap(async (req, res) => {
   const { avatarId, avatarKind, voiceId, text, title, orientation } = req.body;
@@ -603,8 +731,9 @@ app.get('*', (req, res, next) => {
 // folders behind forever; sweep them at boot, when no job can be running.
 const swept = cleanupStorage(new Set());
 if (swept.freedBytes > 0) {
-  console.log(`  storage: swept ${Math.round(swept.freedBytes / 1e6)}MB of stale render temp files (${swept.removedTmp} folder(s), ${swept.removedParts} partial upload(s))`);
+  console.log(`  storage: swept ${Math.round(swept.freedBytes / 1e6)}MB of stale render temp files (${swept.removedTmp} folder(s), ${swept.removedParts} partial upload(s), ${swept.removedCacheFiles || 0} aged cache file(s))`);
 }
+scheduleBackups();
 
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {

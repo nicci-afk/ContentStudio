@@ -58,12 +58,18 @@ export const api = {
       }),
 
   carouselMedia: (id) => send('POST', `/api/packages/${id}/carousel-media`, {}),
+  setPublishedUrl: (id, platformId, url) => send('POST', `/api/packages/${id}/published`, { platformId, url }),
+  regenCitations: (id) => send('POST', `/api/packages/${id}/citations`, {}),
+  setPackageEvent: (id, event) => send('POST', `/api/packages/${id}/event`, event),
   render: (body) => send('POST', '/api/render', body),
   renderStatus: (id) => get(`/api/render/${id}`),
   packageRenders: (pkgId) => get(`/api/packages/${pkgId}/renders`),
+  cutClips: (renderId) => send('POST', `/api/render/${renderId}/clips`, {}),
+  clipsStatus: (jobId) => get(`/api/render/clips/${jobId}`),
 
   avatars: () => get('/api/avatar/avatars'),
   avatarVoices: () => get('/api/avatar/voices'),
+  avatarQuota: () => get('/api/avatar/quota'),
   avatarGenerate: (body) => send('POST', '/api/avatar/generate', body),
   avatarStatus: (id) => get(`/api/avatar/status/${id}`),
 };

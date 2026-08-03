@@ -188,7 +188,7 @@ function renderPackage(pkg, onDelete) {
   const drawBody = () => {
     body.replaceChildren();
     if (active === '_visibility') return body.append(visibilityTab(pkg));
-    if (active === '_metadata') return body.append(metadataTab(pkg));
+    if (active === '_metadata') return body.append(metadataTab(pkg, () => { drawTabs(); drawBody(); }));
     const spec = specs[active];
     const asset = pkg.platforms[active];
     if (!asset) return;
@@ -201,6 +201,7 @@ function renderPackage(pkg, onDelete) {
           copyBtn(pkg.links[active])),
         el('pre', { class: 'asset-value code' }, pkg.links[active])));
     }
+    body.append(publishedUrlRow(pkg, active, () => { drawTabs(); drawBody(); }));
     for (const f of spec?.fields || Object.keys(asset.fields).map((k) => ({ key: k, label: k }))) {
       const value = fieldText(asset.fields[f.key]);
       if (!value) continue;
@@ -267,6 +268,30 @@ function renderPackage(pkg, onDelete) {
     tabRow, body);
 }
 
+// After posting, the live link lands here. It feeds llms.txt canonical
+// URLs, the JSON-LD url and SeekToAction deep links, and the cross_surface
+// score check, which counts live URLs, never drafts.
+function publishedUrlRow(pkg, platformId, onPackageUpdated) {
+  const current = pkg.publishedUrls?.[platformId] || '';
+  const input = textInput({
+    placeholder: 'https://... paste the live link once this is posted',
+    value: current, style: 'flex:1;min-width:220px',
+  });
+  const save = el('button', {
+    class: 'btn btn-ghost btn-xs', onclick: async () => {
+      try {
+        const { package: updated } = await api.setPublishedUrl(pkg.id, platformId, input.value.trim());
+        Object.assign(pkg, updated);
+        toast(input.value.trim() ? 'Live URL registered · schema and llms.txt updated' : 'Live URL cleared');
+        onPackageUpdated?.();
+      } catch (err) { toast(err.message, 'err'); }
+    },
+  }, current ? 'Update' : 'Save');
+  return el('div', { class: 'asset-field' },
+    el('span', { class: 'field-label' }, `Published URL${current ? ' · live ✓' : ' (paste after you post)'}`),
+    el('div', { class: 'row gap', style: 'margin-top:6px' }, input, save));
+}
+
 // One tap matches library assets to the carousel's numbered slides, in
 // order, ranked for AI visibility; the per-slide alt text lands in the
 // package's alt_text field and the plan persists on the package.
@@ -316,7 +341,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const videoSpec = appState.platforms.find((p) => p.id === platformId)?.videoSpec || null;
   // Default to a short avatar open, then B-roll: the fewest HeyGen credits,
   // and what she wants (a few seconds on camera, not a full-video avatar).
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', avatarAudio: 'narration', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; saveVoicePref('narration', state.voiceId); } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -364,6 +389,14 @@ function producePanel(pkg, platformId, onPackageUpdated) {
               a.kind === 'talking_photo' ? `${a.name} (your photo avatar)` : a.name)));
           const vSel = el('select', { class: 'input select', onchange: (ev) => { state.heygenVoiceId = ev.target.value; saveVoicePref('avatar', state.heygenVoiceId); } },
             ...voices.map((v) => el('option', { value: v.id }, `${v.name} (${v.language || '—'})`)));
+          // One voice everywhere: by default the avatar lip-syncs the same
+          // cloned narration voice the rest of the video speaks in.
+          const audioSel = el('select', { class: 'input select', title: 'What voice comes out of your avatar', onchange: (ev) => {
+            state.avatarAudio = ev.target.value;
+            vSel.style.display = state.avatarAudio === 'heygen' ? '' : 'none';
+          } },
+            el('option', { value: 'narration', selected: state.avatarAudio === 'narration' }, 'Speaks in my narration voice (one voice everywhere)'),
+            el('option', { value: 'heygen', selected: state.avatarAudio === 'heygen' }, 'Speaks with a HeyGen voice'));
           // The pinned avatar voice wins; otherwise prefer the voice named
           // after the creator over whatever sits first in the HeyGen list.
           const ownVoice = preferredVoice(voices, 'avatar') || pickOwnVoice(voices);
@@ -378,7 +411,13 @@ function producePanel(pkg, platformId, onPackageUpdated) {
           pickAvatar(avatars[0]?.id || null);
           state.heygenVoiceId = (ownVoice || voices[0])?.id || null;
           if (state.heygenVoiceId) vSel.value = state.heygenVoiceId;
-          avatarWrap.append(aSel, vSel, scopeSel, styleSel);
+          vSel.style.display = state.avatarAudio === 'heygen' ? '' : 'none';
+          avatarWrap.append(aSel, audioSel, vSel, scopeSel, styleSel);
+          api.avatarQuota().then(({ credits }) => {
+            if (credits == null) return;
+            avatarWrap.append(el('span', { class: `muted${credits < 30 ? ' warn' : ''}` },
+              `HeyGen balance: ~${Math.round(credits)} credit${Math.round(credits) === 1 ? '' : 's'}${credits <= 0 ? ' — avatar beats will fall back to narrated B-roll' : ''}`));
+          }).catch(() => {});
         } catch (err) {
           toast(`Avatar unavailable: ${err.message}`, 'err');
           state.useAvatar = false;
@@ -403,6 +442,39 @@ function producePanel(pkg, platformId, onPackageUpdated) {
         return el('div', { class: 'render-row' },
           el('span', { class: 'warn' }, `⚠ ${st}: ${r.error || 'render did not finish'}`));
       };
+      // Chapter clips: one long-form render fans out into a vertical short
+      // per chapter, cut locally from the master (no provider spend).
+      const clipsBlock = (r) => {
+        if (!(r.chapters?.length >= 2)) return null;
+        const wrap = el('div', { class: 'row gap wrap', style: 'margin-top:6px' });
+        if (r.clips?.length) {
+          wrap.append(
+            el('span', { class: 'muted' }, `✂ ${r.clips.length} chapter clips (9:16, captions burned):`),
+            ...r.clips.map((c) => el('a', {
+              class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/clip/${c.n}`,
+              download: `chapter-${c.n}-clip.mp4`, title: `${c.duration}s vertical clip`,
+            }, `⬇ ${c.n}. ${c.title || 'clip'}`)));
+        }
+        const prog = el('span', {});
+        const cutBtn = el('button', {
+          class: 'btn btn-ghost btn-xs', onclick: async () => {
+            cutBtn.replaceWith(prog);
+            prog.replaceChildren(spinner('Cutting…'));
+            try {
+              const { jobId } = await api.cutClips(r.id);
+              while (true) {
+                await new Promise((res) => setTimeout(res, 3000));
+                const job = await api.clipsStatus(jobId);
+                if (job.status === 'done') { toast(`${job.clips.length} vertical clips ready`); await drawRenders(); return; }
+                if (job.status === 'error') throw new Error(job.error || 'clip cutting failed');
+                prog.replaceChildren(spinner(`${job.step || 'cutting'} (${job.clips?.length || 0}/${job.total})`));
+              }
+            } catch (err) { toast(err.message, 'err'); await drawRenders(); }
+          },
+        }, r.clips?.length ? '↻ Re-cut chapter clips' : '✂ Cut chapters into vertical clips (free)');
+        wrap.append(cutBtn, prog);
+        return wrap;
+      };
       // Players start with only a poster frame; video bytes move when you
       // press play, and the in-app stream prefers the phone-sized preview.
       const doneRow = (r) => {
@@ -424,7 +496,8 @@ function producePanel(pkg, platformId, onPackageUpdated) {
               title: 'Same video with audio removed — use for silent autoplay or adding your own music',
             }, '⬇ No sound'),
             el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)));
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarVoice === 'narration' && r.avatar ? ' · one voice (your clone)' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)),
+          clipsBlock(r));
       };
       const active = mine.filter((r) => (r.status || 'done') !== 'done');
       const done = mine.filter((r) => (r.status || 'done') === 'done');
@@ -448,7 +521,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
         voiceId: state.voiceId,
         orientation: state.orientation,
         delivery: state.delivery,
-        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope, style: state.avatarStyle } : null,
+        avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope, style: state.avatarStyle, audioSource: state.avatarAudio } : null,
       });
       while (true) {
         await new Promise((r) => setTimeout(r, 4000));
@@ -518,11 +591,76 @@ function visibilityTab(pkg) {
         c.fix ? el('p', { class: 'fix' }, c.fix) : null)))));
 }
 
-function metadataTab(pkg) {
+// Rebuilds the AI-answer layer (query map, FAQ, cite lines, keywords) from
+// the package's finished copy — the fix for an empty query map and [FILL]
+// FAQ answers, grounded in the hand-edited facts. Platform fields are
+// never touched.
+function citationBlock(pkg, onPackageUpdated) {
+  const fillFaq = (pkg.faq || []).filter((f) => /\[FILL/i.test(f?.a || '')).length;
+  const status = `${(pkg.queryMap || []).length} query phrasings · ${(pkg.faq || []).length} FAQ pairs${fillFaq ? ` (${fillFaq} still [FILL])` : ''}`;
+  const prog = el('span', {});
+  const btn = el('button', {
+    class: 'btn btn-primary btn-xs', onclick: async () => {
+      btn.replaceWith(prog);
+      prog.replaceChildren(spinner('Rebuilding from your finished copy…'));
+      try {
+        const { package: updated } = await api.regenCitations(pkg.id);
+        Object.assign(pkg, updated);
+        toast('AI-answer layer rebuilt · rescored');
+        onPackageUpdated?.();
+      } catch (err) { toast(err.message, 'err'); onPackageUpdated?.(); }
+    },
+  }, '✦ Rebuild AI-answer layer');
+  return el('div', { class: 'asset-field' },
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' }, `AI-answer layer · ${status}`),
+      btn),
+    el('p', { class: 'muted', style: 'margin:6px 0 0' },
+      'Regenerates the query map, FAQ answers, and cite lines using the real facts already edited into this package. Answers that are already real are kept; only the gaps rebuild.'),
+    prog);
+}
+
+// Per-package event facts (dates, place, price) emit Event JSON-LD plus the
+// business block's makesOffer — the most direct trust signal for ranking a
+// dated offer like a retreat.
+function eventBlock(pkg, onPackageUpdated) {
+  const ev = pkg.event || {};
+  const half = 'flex:1;min-width:150px';
+  const f = {
+    name: textInput({ placeholder: 'Event name', value: ev.name || '', style: 'flex:1;min-width:220px' }),
+    startDate: textInput({ placeholder: 'Start (YYYY-MM-DD)', value: ev.startDate || '', style: half }),
+    endDate: textInput({ placeholder: 'End (YYYY-MM-DD)', value: ev.endDate || '', style: half }),
+    locationName: textInput({ placeholder: 'Venue / place name', value: ev.locationName || '', style: half }),
+    address: textInput({ placeholder: 'Address or area', value: ev.address || '', style: half }),
+    price: textInput({ placeholder: 'Price (number only)', value: ev.price || '', style: half }),
+    currency: textInput({ placeholder: 'Currency (USD)', value: ev.currency || '', style: half }),
+    url: textInput({ placeholder: 'Booking or application URL', value: ev.url || '', style: 'flex:1;min-width:220px' }),
+  };
+  const save = el('button', {
+    class: 'btn btn-ghost btn-xs', onclick: async () => {
+      try {
+        const body = Object.fromEntries(Object.entries(f).map(([k, input]) => [k, input.value.trim()]));
+        const { package: updated } = await api.setPackageEvent(pkg.id, body);
+        Object.assign(pkg, updated);
+        toast('Event schema saved · JSON-LD rebuilt');
+        onPackageUpdated?.();
+      } catch (err) { toast(err.message, 'err'); }
+    },
+  }, ev.name ? 'Update' : 'Save');
+  return el('div', { class: 'asset-field' },
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' }, `Event schema${ev.name ? ' · set ✓' : ''} (dates, place, offer)`),
+      save),
+    el('div', { class: 'row gap wrap', style: 'margin-top:6px' }, Object.values(f)));
+}
+
+function metadataTab(pkg, onPackageUpdated) {
   const jsonldText = Object.entries(pkg.jsonld || {})
     .map(([k, v]) => `<!-- ${k} -->\n<script type="application/ld+json">\n${JSON.stringify(v, null, 2)}\n</script>`)
     .join('\n\n');
   return el('div', {},
+    citationBlock(pkg, onPackageUpdated),
+    eventBlock(pkg, onPackageUpdated),
     pkg.definition ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Your definition (own the answer)'), copyBtn(pkg.definition)),
       el('blockquote', { class: 'sample' }, pkg.definition)) : null,

@@ -755,6 +755,28 @@ Fixed in 6097aff:
   excursion company in the area offering a 100% satisfaction guarantee"
   claim, which she wrote and which is a superlative about a partner.
 
+**Flyer pricing captured (2026-08-03, from her designed flyer):** seats
+are all inclusive per person by room share, $2,200 quad / $2,450 triple /
+$2,800 double / $3,300 single, 2% payment processing added at checkout,
+application only. Event JSON-LD now carries an AggregateOffer
+(lowPrice 2200, highPrice 3300, offerCount 4); build 4e58270 added
+lowPrice/highPrice support so a tiered price is never flattened to one
+number and a deposit is never published as a price. Two FAQ pairs added
+from the flyer: what the seat covers (4 nights private villa, all chef
+meals, housekeeping, all private transport, every Living Dreams Mexico
+excursion, marina/docking/Sian Ka'an fees, daily education with Kha Ly
+and Nathan Riddle, Founding Collective membership) and what it does not
+(flights, gratuities, trip insurance, 2% processing; upgrades on request:
+private SUV $150 round trip, in-villa spa from $150/hour).
+UPGRADE PRICING STILL MISSING: she flagged that the alcoholic beverage
+package, gratuity guidance, and the full luxury transportation menu have
+no published prices. Get those numbers before the Website Kit ships, then
+extend the "what is not included" FAQ.
+FLYER COPY FLAG (her call, outside ContentStudio): the intro reads
+"...the way no brochure, agency, or tour operator can", and the inclusions
+list has "The fees others forget". Both differentiate by contrast with
+other operators, the class she has twice asked to eliminate.
+
 **Still open for her:** the four R2 env vars (bucket contentstudio-backup
 created; GET /api/backup reports configured:false until they land), then
 POST /api/backup to verify. Register two more live URLs (site, LinkedIn)

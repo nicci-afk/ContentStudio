@@ -768,10 +768,16 @@ excursion, marina/docking/Sian Ka'an fees, daily education with Kha Ly
 and Nathan Riddle, Founding Collective membership) and what it does not
 (flights, gratuities, trip insurance, 2% processing; upgrades on request:
 private SUV $150 round trip, in-villa spa from $150/hour).
-UPGRADE PRICING STILL MISSING: she flagged that the alcoholic beverage
-package, gratuity guidance, and the full luxury transportation menu have
-no published prices. Get those numbers before the Website Kit ships, then
-extend the "what is not included" FAQ.
+UPGRADE PRICING (2026-08-03, from her, CORRECTING THE FLYER): the event
+is FEES INCLUDED and private transportation is already in the seat price;
+add-ons are optional enhancements only. Alcoholic beverage package $200
+per attendee. Luxury private SUV upgrade $100 each way, $200 round trip
+(the flyer's "$150 round trip" is WRONG). Payment processing is 3%, not
+the 2% printed on the flyer. Gratuity package pricing is still pending
+from her. The flyer's "in-villa spa from $150 per hour" is unverified;
+two of its three numbers were stale, so confirm before publishing it.
+FAQ 5 was rewritten to lead with the fees-included framing and now
+carries 3%, the $200 beverage package, and the $100 each way SUV.
 FLYER COPY FLAG (her call, outside ContentStudio): the intro reads
 "...the way no brochure, agency, or tour operator can", and the inclusions
 list has "The fees others forget". Both differentiate by contrast with

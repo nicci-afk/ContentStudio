@@ -687,6 +687,81 @@ requirement):**
   and never deploys. Manage it via the claude-code-remote trigger tools
   (list_triggers / update_trigger / delete_trigger).
 
+## DEPLOYED AND LIVE (2026-08-03, session 7 close, build 6097aff)
+
+Both batches shipped to production with her explicit go-ahead. Deploy
+branch fast-forwarded from the dev branch twice (a63fc45, then 6097aff).
+
+**Applied in production (launch package 0d5825c2e277bfec, score 96
+AI-Dominant):**
+- Published URL registered: https://youtu.be/rVG3I3usS9c on
+  youtube_long. VideoObject now carries url, 6 hasPart Clips with her
+  hand-polished titles and real offsets, and a SeekToAction; llms.txt
+  lists it under "Published content (canonical URLs)".
+- profile.business.schemaType = "TravelAgency", areaServed =
+  "United States" (confirm areaServed with her; it was a reasonable
+  default, not her words).
+- Event JSON-LD: The Conscious Creator, 2027-02-08 to 2027-02-12
+  (year CONFIRMED by her), Akumal and Tulum, Quintana Roo, Mexico,
+  url consciouscreator.app. PRICE DELIBERATELY OMITTED: the $1,000 is a
+  non-refundable deposit, not the price, and seats run $2,200 to $3,300
+  by room share. Adding an Offer with a real price range is a good next
+  step if she wants it.
+- THE voice pinned: narrationVoiceId = 8TIjMlEyk1P66yOtXPHa (the
+  professional clone, her confirmed choice). avatarVoiceId is now
+  irrelevant by default since avatar beats lip-sync the narration.
+- Citation layer rebuilt: 15 query phrasings, 3 cite lines, 4 real FAQ
+  answers. Zero [FILL] anywhere in the package.
+- Six chapter clips cut from the published cut ad5312a5f9624681
+  (1080x1920, audio, burned captions): 35s, 92s, 52s, 11s, 49s, 25s.
+  Clip 2 at 92s is over the short-form sweet spot; the rest are ready.
+
+**INDUSTRY RESPECT, second incident and the real fix (2026-08-03):** the
+citation regenerate produced FAQ answers comparing her to "big-box travel
+sites" and "advisors chasing the fastest commission". Root cause: the
+FAQ_PROMPT explicitly demanded a comparative question ("...vs...",
+"...worth it compared to..."), which overrode law 17, and the
+industry_respect rubric only caught outright slurs so it passed them.
+Fixed in 6097aff:
+- FAQ_PROMPT now asks for a value question and carries an explicit
+  no-comparison rule (no booking site, platform, OTA, search engine,
+  supplier, agency, or other advisor may be compared to or
+  characterized).
+- regenerateCitations tells the model NOT to inherit contrasts from the
+  source copy: take the fact, state it as what she provides.
+- New rubric check industry_respect_comparative (weight 8) catches
+  differentiating by contrast: big-box <travel object>, cookie cutter,
+  order takers, chasing commission, unlike other advisors, just a
+  booking site. It deliberately does NOT flag "more than a generic
+  booking" (she approved that exact line as the fix after the cesspool
+  incident) and requires a travel object after "big-box" so a literal
+  big box store never trips it.
+- PATCH /api/packages/:id/citations makes the answer layer hand-editable
+  (FAQ pairs, query map, cite lines, definition, quotable) with editors
+  in AI Metadata. This was the last surface with no in-place editing.
+  NOTE: the regenerate keeps FAQ answers that are already real, so a bad
+  answer survives regeneration; hand-edit is the way to replace one.
+- Her platform copy carried the same class of phrasing and four
+  passages were rewritten live via field edits (all in UNPUBLISHED
+  fields; nothing live on YouTube was touched): linkedin.article lost
+  "competing on price against big-brand packages" and both "chasing the
+  fastest commission" lines, gbp.post lost "can't just Google or book on
+  a big-box site", newsletter.body lost "tired of being order-takers"
+  and "a search engine can't book". Before and after for each is in the
+  session transcript; every replacement uses only grounded facts.
+  LEFT ALONE as her judgment call: "not for anyone chasing volume over
+  connection" (newsletter), "instead of just booking trips and leaving"
+  (reddit, self-referential), and the Living Dreams Mexico "only
+  excursion company in the area offering a 100% satisfaction guarantee"
+  claim, which she wrote and which is a superlative about a partner.
+
+**Still open for her:** the four R2 env vars (bucket contentstudio-backup
+created; GET /api/backup reports configured:false until they land), then
+POST /api/backup to verify. Register two more live URLs (site, LinkedIn)
+to clear cross_surface, the only failing check. Consider an Offer price
+range on the Event. ANTHROPIC_MODEL_LIGHT=claude-haiku-4-5-20251001 in
+the Render env activates the cheap tier for utility calls.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

@@ -38,9 +38,29 @@ const EXTENSION_INSTRUCTION = `I am publishing approved content from my ContentS
 For the current card:
 1. Open its composer link in a new tab.
 2. Fill every field exactly as written on the card: titles, descriptions, captions, tags, alt text. Copy verbatim. Never rewrite, shorten, or add hashtags. Fields map by their labels.
-3. If the card lists a media file, tell me the exact file name to attach from my Downloads and wait while I attach it. Do not try to operate the file picker.
-4. NEVER click Post, Publish, Share, or Schedule. When the post is fully prepared, stop and tell me it is ready for my review.
-5. After I post it myself, I will paste the live URL into the card. Then move to the next card.`;
+3. Markdown characters are NOT formatting. If a field contains lines beginning with #, ## or ###, never paste those characters. Paste the heading text alone, then apply the editor's own heading styles from its formatting toolbar: a ## line becomes the largest body heading style, a ### line the next size down, and the # line is the article title field. The card lists the intended heading structure. Real heading styles matter: search engines and AI assistants parse an article by its heading hierarchy, and literal hash marks give them nothing.
+4. If the card lists a media file, tell me the exact file name to attach from my Downloads and wait while I attach it. Do not try to operate the file picker.
+5. NEVER click Post, Publish, Share, or Schedule. When the post is fully prepared, stop and tell me it is ready for my review.
+6. After I post it myself, I will paste the live URL into the card. Then move to the next card.`;
+
+// Markdown headings are the source of truth in ContentStudio (they drive
+// the Website Kit and the JSON-LD), but no social composer converts them.
+// The card spells out the structure so the heading hierarchy survives the
+// move into an editor that has its own styles.
+function headingPlan(text) {
+  const out = [];
+  for (const line of String(text || '').split('\n')) {
+    const m = line.match(/^(#{1,3})\s+(.+?)\s*$/);
+    if (m) out.push({ level: m[1].length, text: m[2] });
+  }
+  return out;
+}
+
+const LEVEL_LABEL = {
+  1: 'Article title field',
+  2: 'Largest heading style',
+  3: 'Next heading size down',
+};
 
 export function renderPublish(root, params = null) {
   const pkgId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
@@ -121,10 +141,17 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
   for (const f of spec?.fields || []) {
     const value = fieldText(pkg.platforms[platformId]?.fields?.[f.key]);
     if (!value) continue;
+    const plan = headingPlan(value);
     fields.push(el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' },
         el('span', { class: 'field-label' }, f.label),
         copyBtn(value)),
+      plan.length ? el('details', { class: 'asset-field', style: 'margin:6px 0' },
+        el('summary', { class: 'field-label' }, `Heading structure to apply in the editor (${plan.length} headings)`),
+        el('p', { class: 'muted', style: 'margin:6px 0' },
+          'The # marks below are not formatting and must not be pasted. Paste the heading text, then apply the editor\'s own heading styles. Search engines and AI assistants read the heading hierarchy, so this step is what makes the structure count.'),
+        el('ul', { class: 'plain-list' }, plan.map((h) =>
+          el('li', {}, `${LEVEL_LABEL[h.level] || 'Heading'}: ${h.text}`)))) : null,
       el('pre', { class: 'asset-value' }, value)));
   }
   if (pkg.links?.[platformId]) {

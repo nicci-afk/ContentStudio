@@ -543,6 +543,117 @@ nicci@travelghr.com (whoskha@gmail.com still needs the Resend domain
 verification plus MAGIC_FROM). Confirm the running build first via GET
 /api/health (build field, currently 04c9e2f).
 
+## Session 7 (2026-08-03): launch video LIVE + full upgrade batch built
+
+**PUBLISHED:** the long-form YouTube video is live:
+https://youtu.be/rVG3I3usS9c ("What Is The Conscious Creator? Who It's
+Actually For", channel @niccigrotefendt.travel). HeyGen balance 3,000+
+credits (user confirmed), so the 2026-07-23 section failures were the
+credit outage. User approved R2 off-site backups (has a Cloudflare
+account).
+
+**VOICE DIRECTIVE (2026-08-03, supersedes the 2026-07-23 canonical-voice
+note):** the user wants her ElevenLabs clone for ALL audio in her voice,
+everywhere. Avatar beats now lip-sync the ElevenLabs narration by default
+(HeyGen audio-asset path below); HeyGen "Nicci - Voice 1" is no longer
+the target. OPEN QUESTION for her: which ElevenLabs clone is THE voice,
+professional 8TIjMlEyk1P66yOtXPHa or instant COsb5gD7rHYmEEDkf7DB
+(currently pinned as narrationVoiceId). If the published video's
+narration sounds right to her, pin the clone that cut used.
+
+**Built 2026-08-03 on dev branch claude/app-system-improvements-d9qe6g
+(verified end to end against a scratchpad mock rig for Anthropic,
+ElevenLabs, HeyGen, and an S3 mock; NOT yet deployed):**
+- Off-site backups (lib/backup.js): daily gzipped JSON bundle (workspace
+  registry, every workspace's state/media/packages, render metas) to any
+  S3-compatible bucket via hand-rolled SigV4 (zero new deps), 30-day
+  retention, GET/POST /api/backup, hourly due-check from boot. Activates
+  when R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+  land in the Render env (R2_ENDPOINT/R2_PREFIX optional). Media
+  originals and MP4s are NOT included (phase 2 is R2 media offload).
+- HeyGen v2 avatar-list fallback removed (v2 dies 2026-10-31). Credit
+  preflight: heygenQuota() reads GET /v3/users/me (all three billing
+  shapes), cached 5 min; GET /api/avatar/quota; produce panel shows
+  "HeyGen balance: ~N credits"; a zero-credit account degrades every
+  fresh avatar beat to narrated b-roll up front; meta.heygenCredits.
+- Auth rate limiting (lib/auth.js, failures only, per client IP, in
+  memory): password 10/15min, Basic auth 25/15min, magic-link sends
+  12/hour (response never varies). /api/health stays public.
+- Cache eviction (lib/storage.js): narration-cache entries idle >45
+  days and avatar-cache entries idle >120 days age out during cleanup
+  and the boot sweep (cache hits refresh mtime via touch);
+  removedCacheFiles in the cleanup report. deleteRender also removes
+  <id>.clip-N.mp4 files.
+- ONE-VOICE PIPELINE (the big one): render avatar option audioSource
+  ('narration' default | 'heygen'). In narration mode each avatar beat's
+  speech renders through ElevenLabs (narration cache applies), uploads
+  via POST /v3/assets, and HeyGen lip-syncs it (audio_asset_id replaces
+  script+voice_id in POST /v3/videos); one clip per beat (no text
+  chunking); avatar captions become word-timed from the ElevenLabs
+  alignment (cachedAlignment() recovers timing for cached clips). Avatar
+  clip cache keys on narration voice+delivery+text ('elaudio' prefix);
+  legacy HeyGen-voice keys unchanged, so every already-paid clip stays
+  valid. UI: avatar options gain "Speaks in my narration voice (one
+  voice everywhere)" (default) vs "Speaks with a HeyGen voice"; the
+  HeyGen voice select hides unless overridden. meta/details line carry
+  avatarVoice ("one voice (your clone)").
+- Chapter-to-clips repurposer: POST /api/render/:id/clips cuts every
+  chapter of a finished render into a 9:16 blur-fill vertical clip with
+  its SRT caption window re-burned. Zero provider spend. GET
+  /api/render/clips/:jobId polls; GET /api/render/:id/clip/:n downloads;
+  clip lists ride the render meta and the render rows (download button
+  per chapter, titles included). Needs 2+ chapters and 1GB free disk.
+- Published-URL registry (upgrade 3): POST /api/packages/:id/published
+  {platformId, url}; "Published URL" field on every platform tab. Feeds
+  llms.txt ("## Published content (canonical URLs)"), VideoObject url +
+  per-Clip deep links + SeekToAction, Article url/mainEntityOfPage
+  (website URL beats linkedin), and cross_surface now counts LIVE
+  registered URLs (3+ to pass) instead of drafted platforms. Scores dip
+  until 3 URLs are registered; that is the point.
+- Citation-layer regenerate: POST /api/packages/:id/citations rebuilds
+  queryMap/citeLines/keywords/entities and fills only FAQ answers that
+  are empty or [FILL] (real answers kept, deduped by question), grounded
+  in a digest of the package's finished hand-edited copy. Platform
+  fields never touched. UI: "Rebuild AI-answer layer" in AI Metadata.
+- Chapters field edits sync into pkg.renders chapter titles (PATCH
+  matches "MM:SS Title" lines to recorded starts within 2s), so jsonld
+  hasPart Clip names follow the hand-polished titles. Closes the known
+  fallback-titles gap.
+- Event + TravelAgency schema (upgrade 2): POST /api/packages/:id/event
+  (name, startDate, endDate, locationName, address, price, currency,
+  url, description) emits Event JSON-LD (Place, Offer, organizer,
+  performer); business block @type comes from
+  profile.business.schemaType (set "TravelAgency"), plus areaServed and
+  makesOffer. Event editor in AI Metadata.
+
+**Verified locally (mock rig in the session scratchpad, not the repo):**
+backup upload grows with data; quota 3120; rate limits 401 to 429 at the
+caps with health public; sections render where 2 avatar beats = 2
+uploaded audio assets and 2 HeyGen videos carrying audio_asset_id and NO
+voice_id; re-render reuses both cached clips with zero new HeyGen calls;
+chapters recorded; published/citations/event/chapter-sync all reflected
+in JSON-LD; clips are 1080x1920 with audio and burned captions, titled
+from the edited chapters field; llms.txt lists the live URL; Playwright
+UI smoke clean (no console errors, no stray null text).
+
+**After deploy, in production, in order:**
+1. Register https://youtu.be/rVG3I3usS9c as the launch package's
+   youtube_long Published URL (0d5825c2e277bfec).
+2. PATCH profile.business.schemaType="TravelAgency" (and areaServed),
+   then set the launch package event facts (retreat Feb 8-12, CONFIRM
+   the year with the user, deposit $1,000, Akumal & Tulum) and rescore.
+3. Run the citations regenerate on the launch package (fills the empty
+   queryMap and the three [FILL] FAQ answers). Then the Website Kit into
+   Lovable is unblocked.
+4. Cut chapter clips from the uploaded long-form cut (ad5312a5f9624681
+   was the recommended upload; confirm which cut she posted).
+5. R2: user creates a bucket + Object Read & Write API token in the
+   Cloudflare dashboard and adds the four env vars; env save restarts
+   the service (check nothing rendering); then POST /api/backup and
+   verify GET /api/backup shows lastSuccess.
+6. Voice: pin whichever ElevenLabs clone she confirms as THE voice; the
+   next avatar render then speaks entirely in it (open beats included).
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:
@@ -554,13 +665,15 @@ Highest leverage first; 1-3 build directly on the section-based renderer:
    render, and add hasPart Clip entries (startOffset/endOffset) plus
    duration/SeekToAction to the VideoObject JSON-LD. Chapters are jump-to
    answers in Google and assistants.
-2. **Event + TravelAgency schema.** The launch is literally an event
+2. **Event + TravelAgency schema. DONE (built session 7, 2026-08-03,
+   awaiting deploy).** The launch is literally an event
    (Feb 8-12 retreat, Akumal & Tulum). Add per-package offer/event fields
    (dates, Place with geo, price) emitting Event JSON-LD in the Website
    Kit, and upgrade the business block to TravelAgency (LocalBusiness
    subtype) with areaServed/makesOffer. Most relevant trust signal for
    ranking the retreat itself.
-3. **Published-URL registry.** Packages never learn where content went
+3. **Published-URL registry. DONE (built session 7, 2026-08-03,
+   awaiting deploy).** Packages never learn where content went
    live. Add per-platform published-URL fields; feed them into llms.txt
    (canonical versions), JSON-LD url/sameAs, and upgrade the
    cross_surface rubric check to count live URLs instead of drafted

@@ -652,7 +652,9 @@ function eventBlock(pkg, onPackageUpdated) {
     endDate: textInput({ placeholder: 'End (YYYY-MM-DD)', value: ev.endDate || '', style: half }),
     locationName: textInput({ placeholder: 'Venue / place name', value: ev.locationName || '', style: half }),
     address: textInput({ placeholder: 'Address or area', value: ev.address || '', style: half }),
-    price: textInput({ placeholder: 'Price (number only)', value: ev.price || '', style: half }),
+    lowPrice: textInput({ placeholder: 'Lowest seat price', value: ev.lowPrice || '', style: half }),
+    highPrice: textInput({ placeholder: 'Highest seat price', value: ev.highPrice || '', style: half }),
+    price: textInput({ placeholder: 'Or one flat price', value: ev.price || '', style: half }),
     currency: textInput({ placeholder: 'Currency (USD)', value: ev.currency || '', style: half }),
     url: textInput({ placeholder: 'Booking or application URL', value: ev.url || '', style: 'flex:1;min-width:220px' }),
   };

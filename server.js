@@ -559,7 +559,8 @@ app.patch('/api/packages/:id/citations', (req, res) => {
 // Per-package event facts (the retreat IS an event): dates, place, price.
 // Emits Event JSON-LD and the business block's makesOffer.
 app.post('/api/packages/:id/event', (req, res) => {
-  const allowed = ['name', 'startDate', 'endDate', 'locationName', 'address', 'price', 'currency', 'url', 'description'];
+  const allowed = ['name', 'startDate', 'endDate', 'locationName', 'address',
+    'price', 'lowPrice', 'highPrice', 'offerCount', 'currency', 'url', 'description'];
   const event = {};
   for (const k of allowed) {
     const v = req.body?.[k];

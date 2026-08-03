@@ -760,6 +760,39 @@ function editableFaq(pkg, onPackageUpdated) {
   return wrap;
 }
 
+// Media attached to a finished package. Importing photos after generating
+// used to leave a package with no visuals and no way to add them; this
+// picks from the library in place, keeping every hand edit intact.
+function packageMediaBlock(pkg, onPackageUpdated) {
+  const has = (pkg.mediaIds || []).length;
+  const prog = el('span', {});
+  const btn = el('button', {
+    class: `btn btn-${has ? 'ghost' : 'primary'} btn-xs`, onclick: async () => {
+      btn.replaceWith(prog);
+      prog.replaceChildren(spinner('Choosing the strongest assets for this topic…'));
+      try {
+        const { package: updated } = await api.attachMedia(pkg.id);
+        Object.assign(pkg, updated);
+        toast(`${updated.mediaIds.length} assets attached · alt text applied`);
+        onPackageUpdated?.();
+      } catch (err) { toast(err.message, 'err'); onPackageUpdated?.(); }
+    },
+  }, has ? '↻ Re-pick media' : '✦ Pick media from my library');
+  return el('div', { class: 'asset-field' },
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' },
+        `Media in this package${has ? (pkg.mediaSelectionMode === 'ai' ? ' (AI-selected)' : '') : ' (none attached yet)'}`),
+      btn),
+    has
+      ? el('div', { class: 'mini-media-row' }, pkg.mediaIds.map((id) => el('div', { class: 'pick-cell' },
+          el('a', { href: `/api/media/${id}/file`, target: '_blank', title: 'Open the full-size file for posting' },
+            el('img', { class: 'mini-thumb on', src: `/api/media/${id}/thumb`, alt: pkg.altTexts?.[id] || 'selected media' })),
+          pkg.mediaSelection?.[id] ? el('span', { class: 'muted pick-reason' }, pkg.mediaSelection[id]) : null)))
+      : el('p', { class: 'muted', style: 'margin:6px 0 0' },
+          'Ranks your analyzed library against this topic and attaches the strongest assets, writing their alt text into the package. Use it after importing new photos.'),
+    prog);
+}
+
 function metadataTab(pkg, onPackageUpdated) {
   const jsonldText = Object.entries(pkg.jsonld || {})
     .map(([k, v]) => `<!-- ${k} -->\n<script type="application/ld+json">\n${JSON.stringify(v, null, 2)}\n</script>`)
@@ -772,11 +805,7 @@ function metadataTab(pkg, onPackageUpdated) {
       el('blockquote', { class: 'sample' }, pkg.definition)) : null,
     editableList(pkg, 'Attribution-ready claim lines', 'citeLines', 6, onPackageUpdated),
     editableList(pkg, 'Query map (phrasings this package should win)', 'queryMap', 20, onPackageUpdated),
-    (pkg.mediaIds || []).length ? el('div', { class: 'asset-field' },
-      el('span', { class: 'field-label' }, `Media in this package${pkg.mediaSelectionMode === 'ai' ? ' (AI-selected)' : ''}`),
-      el('div', { class: 'mini-media-row' }, pkg.mediaIds.map((id) => el('div', { class: 'pick-cell' },
-        el('img', { class: 'mini-thumb on', src: `/api/media/${id}/thumb`, alt: pkg.altTexts?.[id] || 'selected media' }),
-        pkg.mediaSelection?.[id] ? el('span', { class: 'muted pick-reason' }, pkg.mediaSelection[id]) : null)))) : null,
+    packageMediaBlock(pkg, onPackageUpdated),
     Object.keys(pkg.links || {}).length ? el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Tracked CTA links (one per platform)'), copyBtn(Object.entries(pkg.links).map(([k, v]) => `${k}: ${v}`).join('\n'))),
       el('ul', { class: 'plain-list' }, Object.entries(pkg.links).map(([k, v]) => el('li', {}, `${k} → ${v}`)))) : null,

@@ -699,6 +699,56 @@ app.get('/api/render/:id/clip/:n', (req, res) => {
   res.sendFile(file, RENDER_CACHE);
 });
 
+// Attach library media to a package that already exists. Media was only
+// ever selected at generation time, so importing photos afterwards left
+// finished packages with nothing visual and no way to fix it short of
+// regenerating (which would throw away every hand edit). Alt text comes
+// from each item's stored analysis, so this costs one selection call at
+// most and nothing at all when the picks are explicit.
+app.post('/api/packages/:id/media', wrap(async (req, res) => {
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const state = stateStore.get();
+  const items = mediaStore.get().items || [];
+  if (!items.length) return res.status(400).json({ error: 'the media library is empty; import photos first' });
+
+  let ids = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds.filter((id) => items.some((m) => m.id === id)) : [];
+  let reasons = {};
+  let mode = 'manual';
+  if (!ids.length) {
+    const pillar = (state.profile.pillars || []).find((p) => p.id === pkg.pillarId) || null;
+    const sel = await selectMedia({
+      profile: state.profile, topic: pkg.topic, angle: pkg.angle, pillar, items,
+      count: Math.min(12, Math.max(1, Number(req.body?.count) || 8)),
+    });
+    ids = sel.ids;
+    reasons = sel.reasons;
+    mode = sel.mode;
+  }
+  if (!ids.length) return res.status(400).json({ error: 'no usable media could be selected' });
+
+  const clamp = (s) => String(s || '').replace(/[–—]/g, ',').slice(0, 125);
+  let updated = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== pkg.id) return p;
+      p.mediaIds = ids;
+      p.mediaSelection = reasons;
+      p.mediaSelectionMode = mode;
+      p.altTexts = { ...(p.altTexts || {}) };
+      for (const id of ids) {
+        const m = items.find((x) => x.id === id);
+        const alt = clamp(m?.alt || m?.caption || m?.name);
+        if (alt) p.altTexts[id] = alt;
+      }
+      p.jsonld = buildJsonLd(p, state.profile);
+      p.visibility = scorePackage(p, state.profile);
+      return (updated = p);
+    }),
+  }));
+  res.json({ package: updated });
+}));
+
 // AI-match library assets to the carousel's numbered slides, store the
 // ordered plan on the package, and (unless applyAlt is false) write the
 // per-slide alt text into the carousel's alt_text field.

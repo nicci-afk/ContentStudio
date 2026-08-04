@@ -904,7 +904,26 @@ NOTE she is drafting from the Travel GHR COMPANY page
 (fsd_company:108566841). Company pages reach roughly 1.6% of followers vs
 8-12% for personal profiles, and her personal profile is already the
 corporate-focused one, so publishing there and resharing from the page
-would reach more of the right audience. Flagged, her call.
+would reach more of the right audience. Flagged, and SHE CHOSE the
+personal-first, reshare-to-company strategy.
+
+**Two-step publishing built (2026-08-03, her decision, works for every
+brand): see docs/PUBLISHING-PLAYBOOK.md.**
+- profile.publishing per workspace, e.g. {linkedin: {primary: 'personal'
+  | 'company' | 'personal_only', companyUrl, reshare}}. Edited on the
+  Publish Run page under "LinkedIn publishing strategy for this brand".
+  Absent config keeps the old single-step card, so nothing changes for a
+  brand that has not set one.
+- Step 2 block on the card appears only once step 1 has a live URL (a
+  reshare needs something to point at): company page link, reshare
+  commentary (POST /api/packages/:id/reshare with generate:true writes it
+  in the BRAND voice about her in the third person, light tier, template
+  fallback), inline editing, and a reshare URL box.
+- CRITICAL DESIGN CHOICE: reshares live in pkg.reshares, NOT
+  pkg.publishedUrls, so a reshare never inflates cross_surface. The same
+  article on a second surface is distribution; corroboration means
+  independent surfaces. The card says so in plain language.
+- The assistant instruction gained a step 7 covering the reshare.
 
 ## Recommended next for AI visibility (2026-07-22 assessment)
 

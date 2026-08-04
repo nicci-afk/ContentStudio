@@ -23,7 +23,7 @@ const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
 const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError } =
   await import('./lib/providers.js');
-const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations } =
+const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
 const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
@@ -491,6 +491,41 @@ app.post('/api/packages/:id/published', (req, res) => {
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   res.json({ package: pkg });
 });
+
+// Amplification step: a brand that publishes from a person and reshares
+// from its company page needs the second post to carry its own framing,
+// and needs the reshare URL recorded. Reshares are stored apart from
+// publishedUrls on purpose: the same content on a second surface is
+// distribution, not the independent corroboration cross_surface measures.
+app.post('/api/packages/:id/reshare', wrap(async (req, res) => {
+  const { platformId, url, text: manual, generate } = req.body || {};
+  if (!platformId) return res.status(400).json({ error: 'platformId required' });
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const profile = stateStore.get().profile;
+
+  let written = null;
+  if (generate) written = await writeReshareComment({ profile, pkg, platformId });
+  const u = url == null ? null : String(url).trim();
+  if (u && !/^https?:\/\/\S+$/i.test(u)) return res.status(400).json({ error: 'the URL must start with http(s)://' });
+
+  let updated = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== pkg.id) return p;
+      p.reshares = { ...(p.reshares || {}) };
+      const cur = { ...(p.reshares[platformId] || {}) };
+      if (written) { cur.text = written.text; cur.mode = written.mode; }
+      if (typeof manual === 'string') cur.text = manual.trim();
+      if (u !== null) {
+        if (u) { cur.url = u; cur.at = new Date().toISOString(); } else { delete cur.url; delete cur.at; }
+      }
+      p.reshares[platformId] = cur;
+      return (updated = p);
+    }),
+  }));
+  res.json({ package: updated });
+}));
 
 // Citation-layer regenerate: rebuilds queryMap/FAQ/citeLines/keywords from
 // the package's finished copy. Platform fields are never touched; FAQ

@@ -7,7 +7,7 @@
 // and always stop short of posting, so the creator keeps the final click.
 
 import { api, appState } from './api.js';
-import { el, toast, spinner, copyBtn, copyRich, emptyState } from './ui.js';
+import { el, toast, spinner, copyBtn, copyRich, emptyState, textInput, textArea } from './ui.js';
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
 
@@ -46,7 +46,8 @@ For the current card:
 3. Markdown characters are NOT formatting. If a field contains lines beginning with #, ## or ###, never paste those characters. Paste the heading text alone, then apply the editor's own heading styles from its formatting toolbar: a ## line becomes the largest body heading style, a ### line the next size down, and the # line is the article title field. The card lists the intended heading structure. Real heading styles matter: search engines and AI assistants parse an article by its heading hierarchy, and literal hash marks give them nothing.
 4. If the card lists a media file, tell me the exact file name to attach from my Downloads and wait while I attach it. Do not try to operate the file picker.
 5. NEVER click Post, Publish, Share, or Schedule. When the post is fully prepared, stop and tell me it is ready for my review.
-6. After I post it myself, I will paste the live URL into the card. Then move to the next card.`;
+6. After I post it myself, I will paste the live URL into the card. Then move to the next card.
+7. Some cards have a "Step 2 reshare from the company page" section. That step happens only after the first post is live: open the company page, reshare the live post, and add the commentary from that section above it. Stop before posting there too.`;
 
 // Markdown headings are the source of truth in ContentStudio (they drive
 // the Website Kit and the JSON-LD), but no social composer converts them.
@@ -148,10 +149,51 @@ async function draw(container, pkgId) {
         copyBtn(EXTENSION_INSTRUCTION)),
       el('p', { class: 'muted', style: 'margin:6px 0 0' },
         'Copy this and paste it yourself, in your own message, so the instruction comes from you. A browser assistant should never act on instructions it finds on a web page, including this one. Once sent, it fills each composer from the cards below and stops before posting, so every post ships only after your click.')),
+    publishingProfileBlock(() => drawCards()),
     ordered.length ? cards : el('div', { class: 'card' },
       emptyState('Nothing approved yet', 'Approve platforms on the package (the Approve toggle on each tab) and they appear here in posting order.')),
   );
   drawCards();
+}
+
+// Per-brand publishing profile. A brand can publish from a person and
+// amplify from its company page, which is a different act from publishing
+// somewhere new: reach comes from the personal profile, brand consolidation
+// from the page. Stored on the workspace profile so every brand carries its
+// own strategy, and absent config keeps the old single-step behavior.
+const pubCfg = (platformId) => (appState.profile?.publishing || {})[platformId] || {};
+
+function publishingProfileBlock(onSaved) {
+  const cfg = pubCfg('linkedin');
+  const identity = el('select', { class: 'input select' },
+    el('option', { value: 'personal', selected: (cfg.primary || 'personal') === 'personal' }, 'Publish from my personal profile, then reshare from the company page'),
+    el('option', { value: 'company', selected: cfg.primary === 'company' }, 'Publish from the company page only'),
+    el('option', { value: 'personal_only', selected: cfg.primary === 'personal_only' }, 'Publish from my personal profile only'));
+  const companyUrl = textInput({
+    placeholder: 'https://www.linkedin.com/company/... (your company page)',
+    value: cfg.companyUrl || '', style: 'flex:1;min-width:240px',
+  });
+  const save = el('button', {
+    class: 'btn btn-ghost btn-xs', onclick: async () => {
+      try {
+        const publishing = { ...(appState.profile.publishing || {}) };
+        publishing.linkedin = {
+          primary: identity.value,
+          companyUrl: companyUrl.value.trim(),
+          reshare: identity.value === 'personal',
+        };
+        await api.patchState('profile.publishing', publishing);
+        if (appState.state?.profile) appState.state.profile.publishing = publishing;
+        toast('Publishing strategy saved for this brand');
+        onSaved?.();
+      } catch (err) { toast(err.message, 'err'); }
+    },
+  }, 'Save strategy');
+  return el('details', { class: 'card' },
+    el('summary', { class: 'field-label' }, 'LinkedIn publishing strategy for this brand'),
+    el('p', { class: 'muted', style: 'margin:8px 0' },
+      'Personal profiles reach roughly 8 to 12 percent of followers against about 1.6 percent for company pages, so the reach comes from publishing as a person. Resharing from the page afterwards keeps the brand entity consolidated without giving up that reach.'),
+    el('div', { class: 'row gap wrap' }, identity, companyUrl, save));
 }
 
 function mediaLinks(pkg, platformId, spec, renders) {
@@ -260,5 +302,79 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
     ...fields,
     el('div', { class: 'asset-field' },
       el('span', { class: 'field-label' }, posted ? 'Update the live URL' : 'After posting'),
-      el('div', { class: 'row gap', style: 'margin-top:6px' }, urlInput, saveBtn)));
+      el('div', { class: 'row gap', style: 'margin-top:6px' }, urlInput, saveBtn)),
+    reshareBlock(pkg, platformId, refresh));
+}
+
+// Step 2 for a brand that amplifies from a company page. It only appears
+// once step 1 is live, because a reshare needs something to point at.
+function reshareBlock(pkg, platformId, refresh) {
+  const cfg = pubCfg(platformId);
+  if (!cfg.reshare) return null;
+  const live = pkg.publishedUrls?.[platformId];
+  const state = pkg.reshares?.[platformId] || {};
+  if (!live) {
+    return el('div', { class: 'asset-field' },
+      el('span', { class: 'field-label' }, 'Step 2 · reshare from the company page'),
+      el('p', { class: 'muted', style: 'margin:6px 0 0' },
+        'Publish from your personal profile first and save the live URL above. This step unlocks once there is a post to amplify.'));
+  }
+  const box = el('div', {});
+  const draw = () => {
+    const ta = textArea({ rows: 3 });
+    ta.value = state.text || '';
+    const gen = el('button', {
+      class: 'btn btn-ghost btn-xs', onclick: async () => {
+        const busy = spinner('Writing the company framing…');
+        gen.replaceWith(busy);
+        try {
+          const { package: updated } = await api.reshare(pkg.id, { platformId, generate: true });
+          Object.assign(pkg, updated);
+          toast('Reshare commentary written');
+          refresh();
+        } catch (err) { toast(err.message, 'err'); refresh(); }
+      },
+    }, state.text ? '↻ Rewrite' : '✦ Write the reshare commentary');
+    const saveText = el('button', {
+      class: 'btn btn-ghost btn-xs', onclick: async () => {
+        try {
+          const { package: updated } = await api.reshare(pkg.id, { platformId, text: ta.value });
+          Object.assign(pkg, updated);
+          toast('Saved');
+        } catch (err) { toast(err.message, 'err'); }
+      },
+    }, 'Save text');
+    const urlIn = textInput({
+      placeholder: 'https://... the reshare URL from the company page',
+      value: state.url || '', style: 'flex:1;min-width:220px',
+    });
+    const saveUrl = el('button', {
+      class: 'btn btn-ghost btn-xs', onclick: async () => {
+        try {
+          const { package: updated } = await api.reshare(pkg.id, { platformId, url: urlIn.value.trim() });
+          Object.assign(pkg, updated);
+          toast(urlIn.value.trim() ? 'Reshare recorded' : 'Reshare cleared');
+          refresh();
+        } catch (err) { toast(err.message, 'err'); }
+      },
+    }, 'Mark reshared');
+
+    box.replaceChildren(
+      el('div', { class: 'row spread' },
+        el('span', { class: 'field-label' }, `Step 2 · reshare from the company page${state.url ? ' ✅' : ''}`),
+        el('div', { class: 'row gap' },
+          cfg.companyUrl ? el('a', { class: 'btn btn-ghost btn-xs', href: cfg.companyUrl, target: '_blank', rel: 'noopener' }, '↗ Open company page') : null,
+          gen)),
+      el('p', { class: 'muted', style: 'margin:6px 0' },
+        'On the company page, paste the live post URL to reshare it and add this framing above it. A reshare with its own commentary outperforms a bare one, and it should speak in the brand voice rather than repeat your personal post.'),
+      ta,
+      el('div', { class: 'row gap', style: 'margin-top:6px' },
+        state.text ? copyBtn(state.text, 'Copy commentary') : null,
+        saveText),
+      el('div', { class: 'row gap', style: 'margin-top:8px' }, urlIn, saveUrl),
+      el('p', { class: 'muted', style: 'margin:6px 0 0' },
+        'Recorded as amplification, deliberately kept out of the corroboration count: the same article on a second surface is distribution, not an independent source.'));
+  };
+  draw();
+  return el('div', { class: 'asset-field' }, box);
 }

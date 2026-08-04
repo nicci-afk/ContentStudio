@@ -42,7 +42,7 @@ const EXTENSION_INSTRUCTION = `I am publishing approved content from my ContentS
 
 For the current card:
 1. Open its composer link in a new tab.
-2. Fill every field exactly as written on the card: titles, descriptions, captions, tags, alt text. Copy verbatim. Never rewrite, shorten, or add hashtags. Fields map by their labels.
+2. Fill every field exactly as written on the card. Copy verbatim: never rewrite, shorten, or invent. Each field carries a line starting with an arrow saying exactly where it goes; follow it. Some fields are for me only and are never posted, and some are already inside the video. If a card holds both a long-form article and a feed post, do the article first, because the post refers to it.
 3. Markdown characters are NOT formatting. If a field contains lines beginning with #, ## or ###, never paste those characters. Paste the heading text alone, then apply the editor's own heading styles from its formatting toolbar: a ## line becomes the largest body heading style, a ### line the next size down, and the # line is the article title field. The card lists the intended heading structure. Real heading styles matter: search engines and AI assistants parse an article by its heading hierarchy, and literal hash marks give them nothing.
 4. If the card lists a media file, tell me the exact file name to attach from my Downloads and wait while I attach it. Do not try to operate the file picker.
 5. NEVER click Post, Publish, Share, or Schedule. When the post is fully prepared, stop and tell me it is ready for my review.
@@ -67,6 +67,34 @@ const LEVEL_LABEL = {
   2: 'Largest heading style',
   3: 'Next heading size down',
 };
+
+// Where each field actually goes. Without this the card is a pile of text
+// and whoever fills the composer has to guess whether hashtags belong in
+// the body, whether a comment field is a comment, and what never gets
+// posted at all.
+const PLACEMENT = {
+  post: 'Paste into the feed post body.',
+  article: 'Paste into the article body. Use Copy formatted so the headings survive.',
+  article_title: 'Goes in the article editor\'s own title field.',
+  hashtags: 'Append to the very end of the post body, after a blank line.',
+  comment_starter: 'Post this as the FIRST COMMENT after publishing. Never in the body.',
+  caption: 'Paste into the caption field.',
+  description: 'Paste into the description field.',
+  title: 'Goes in the title field.',
+  tags: 'Goes in the tags or keywords field.',
+  alt_text: 'Paste into the platform\'s own alt text field, one per image.',
+  chapters: 'Paste into the description where the timestamp block belongs.',
+  hook: 'Already spoken and on screen in the video. Do not paste it anywhere.',
+  script: 'Already rendered into the video. Do not paste it anywhere.',
+  overlay_text: 'Already burned into the video. Do not paste it anywhere.',
+  production_notes: 'Notes for the creator only. Never posted.',
+  todo: 'Checklist for the creator only. Never posted.',
+  slides: 'Slide order reference for the carousel images. Not pasted as text.',
+};
+
+// Platforms that suppress reach when the post body carries an outbound
+// link, so the link belongs in the first comment instead.
+const LINK_IN_COMMENT = new Set(['linkedin', 'facebook']);
 
 // Markdown to HTML, so the clipboard can carry real formatting into an
 // editor that has its own styles. Deliberately small: the article grammar
@@ -247,6 +275,7 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
             onclick: () => copyRich(mdToHtml(value), mdToPlain(value)),
           }, 'Copy formatted') : null,
           copyBtn(value, plan.length ? 'Copy raw' : 'Copy'))),
+      PLACEMENT[f.key] ? el('p', { class: 'muted', style: 'margin:2px 0 6px' }, `→ ${PLACEMENT[f.key]}`) : null,
       plan.length ? el('details', { class: 'asset-field', style: 'margin:6px 0' },
         el('summary', { class: 'field-label' }, `Heading structure to apply in the editor (${plan.length} headings)`),
         el('p', { class: 'muted', style: 'margin:6px 0' },
@@ -256,10 +285,18 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
       el('pre', { class: 'asset-value' }, value)));
   }
   if (pkg.links?.[platformId]) {
+    const usesPlaceholder = Object.values(pkg.platforms[platformId]?.fields || {})
+      .some((v) => fieldText(v).includes('[LINK]'));
     fields.push(el('div', { class: 'asset-field' },
       el('div', { class: 'row spread' },
-        el('span', { class: 'field-label' }, 'Tracked CTA link (replaces [LINK])'),
+        el('span', { class: 'field-label' }, 'Tracked CTA link'),
         copyBtn(pkg.links[platformId])),
+      el('p', { class: 'muted', style: 'margin:2px 0 6px' },
+        usesPlaceholder
+          ? '→ Replaces the [LINK] placeholder wherever it appears in the copy above.'
+          : LINK_IN_COMMENT.has(platformId)
+            ? '→ Do NOT put this in the post body: an outbound link there suppresses reach on this platform. Put it in the first comment, or use it as the closing link inside a long-form article.'
+            : '→ Use as the closing call to action link.'),
       el('pre', { class: 'asset-value code' }, pkg.links[platformId])));
   }
 

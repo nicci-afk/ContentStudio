@@ -925,6 +925,64 @@ brand): see docs/PUBLISHING-PLAYBOOK.md.**
   independent surfaces. The card says so in plain language.
 - The assistant instruction gained a step 7 covering the reshare.
 
+## Session 8 (2026-08-04): first full publish + THE website fix
+
+**Travel GHR article PUBLISHED across three surfaces:**
+- LinkedIn article (personal profile): https://www.linkedin.com/pulse/
+  what-does-corporate-event-travel-advisor-actually-do-nicci-grotefendt-fawfc
+- Company page reshare: linkedin.com/feed/update/urn:li:activity:7490496259674476547
+  (recorded in pkg.reshares, deliberately NOT counted by cross_surface)
+- Website: https://travelghr.com/journal/
+  what-does-a-corporate-event-travel-advisor-actually-do
+Package eefa86e1b3805561, 96 AI-Dominant, cross_surface now 2 of 3 live URLs.
+
+**THE BIG FIND: travelghr.com was invisible to AI crawlers, now fixed.**
+travelghr.com IS the Lovable project "Travel GHR Website"
+(f3ebf3fa-86a9-40d8-a2c7-074c248c21bb, custom domain over Lovable hosting;
+proved by the x-deployment-id header matching the deploy_project response).
+It was a client-rendered Vite/React SPA, so every route served a 2,403 byte
+shell containing only <div id="root"></div>, the HOMEPAGE title, and the
+HOMEPAGE meta description. No content, no JSON-LD. Meanwhile robots.txt
+explicitly invites GPTBot, ClaudeBot, PerplexityBot, CCBot and friends, and
+as of 2026 none of those execute JavaScript (only Googlebot does, on a
+delayed queue). Every page on the site was uncitable, and every shared link
+previewed as the homepage.
+FIXED via build-time prerendering (the user ran the staged prompt in the
+Lovable editor after the same request through the MCP API was silently
+dropped: accepted, then no reply and no commit for 20+ minutes).
+VERIFIED from outside fetching as GPTBot: article route now 61,050 bytes,
+per-route titles/descriptions/canonicals/OG tags all correct and distinct,
+full body text present, and SIX JSON-LD blocks parse (Article, FAQPage with
+4 questions, Person, Organization, BreadcrumbList, plus a graph block).
+LESSON: for any future site work, always check what the SERVER returns, not
+what the browser renders. WebFetch executes JS and will happily show content
+that no AI crawler can see.
+
+**Fixed before it went live (both caught during the website build):**
+- profile.business.person.credentials said "under budget pressure", which is
+  on her own blocklist and was flowing into the published author JSON-LD.
+  Profile corrected to "under real financial pressure" so it stops recurring.
+- The article's own FAQ still asked "Is a corporate event travel advisor
+  different from a regular travel agency?" and answered "A regular travel
+  agency typically books a trip". Fourth instance of differentiating by
+  contrast. Reframed to "What makes a corporate event travel advisor
+  different from booking the trip yourself?".
+
+**Publish-flow gaps closed this session (all deployed):** field placement
+lines on every Publish Run field (where each one goes, what is never posted),
+the tracked CTA link explaining the outbound-link reach penalty on LinkedIn
+and Facebook, "Copy formatted" putting real HTML on the clipboard so markdown
+headings survive a paste, attached media on every card, split LinkedIn
+composer links (Write article vs New feed post), and the assistant
+instruction reframed so direction comes from her rather than from the page.
+
+**Notes for next time:** the browser extension formatted 15 headings
+correctly but asked three rounds of clarifying questions and burned a lot of
+her plan usage before filling one field; for a single asset she is faster
+doing it herself, and the extension earns its keep on multi-platform days.
+HeyGen wallet reads 0.58 (billingType wallet), which conflicts with the
+3,000+ she reported; check before any avatar render.
+
 ## Recommended next for AI visibility (2026-07-22 assessment)
 
 Highest leverage first; 1-3 build directly on the section-based renderer:

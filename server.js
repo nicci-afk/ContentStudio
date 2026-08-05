@@ -23,7 +23,7 @@ const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
 const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError } =
   await import('./lib/providers.js');
-const { generatePackage, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
+const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
 const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
@@ -733,6 +733,66 @@ app.get('/api/render/:id/clip/:n', (req, res) => {
   res.set('Content-Disposition', `attachment; filename="chapter-${n}-clip.mp4"`);
   res.sendFile(file, RENDER_CACHE);
 });
+
+// Add platform assets to an existing package (job-based: several platforms
+// take a while). Existing assets, approvals, published URLs, and hand edits
+// are never touched.
+app.post('/api/packages/:id/platforms', wrap(async (req, res) => {
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const wanted = Array.isArray(req.body?.platforms) ? req.body.platforms : [];
+  if (!wanted.length) return res.status(400).json({ error: 'platforms[] required' });
+  const state = stateStore.get();
+  const media = (mediaStore.get().items || []).filter((m) => (pkg.mediaIds || []).includes(m.id));
+
+  const jobId = uid();
+  const job = { id: jobId, status: 'running', progress: { done: 0, total: wanted.length }, packageId: pkg.id, error: null };
+  jobs.set(jobId, job);
+
+  (async () => {
+    const added = await generatePlatforms({
+      profile: state.profile, pkg, platformIds: wanted, media,
+      onProgress: (p) => { job.progress = p; },
+    });
+    packageStore.update((s) => ({
+      items: s.items.map((p) => {
+        if (p.id !== pkg.id) return p;
+        p.platforms = { ...(p.platforms || {}), ...added };
+        if (p.ctaUrl) {
+          p.links = { ...(p.links || {}) };
+          for (const id of Object.keys(added)) {
+            if (!p.links[id]) p.links[id] = trackedLinkFor(p.ctaUrl, id, p.topic);
+          }
+        }
+        p.jsonld = buildJsonLd(p, state.profile);
+        p.visibility = scorePackage(p, state.profile);
+        job.package = p;
+        return p;
+      }),
+    }));
+    job.added = Object.keys(added);
+    job.status = 'done';
+  })().catch((err) => {
+    job.status = 'error';
+    job.error = String(err.message).slice(0, 300);
+  });
+
+  res.json({ jobId });
+}));
+
+// Same tracked-link shape generation uses, so a platform added later gets
+// the identical utm treatment as one written at generation time.
+function trackedLinkFor(base, platformId, topic) {
+  try {
+    const url = new URL(base);
+    url.searchParams.set('utm_source', platformId);
+    url.searchParams.set('utm_medium', 'organic');
+    url.searchParams.set('utm_campaign', String(topic).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50));
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
 
 // Attach library media to a package that already exists. Media was only
 // ever selected at generation time, so importing photos afterwards left

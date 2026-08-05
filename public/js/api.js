@@ -57,6 +57,7 @@ export const api = {
         return res.blob();
       }),
 
+  addPlatforms: (id, platforms) => send('POST', `/api/packages/${id}/platforms`, { platforms }),
   attachMedia: (id, body = {}) => send('POST', `/api/packages/${id}/media`, body),
   carouselMedia: (id) => send('POST', `/api/packages/${id}/carousel-media`, {}),
   approvePlatform: (id, platformId, approved) => send('POST', `/api/packages/${id}/approve`, { platformId, approved }),

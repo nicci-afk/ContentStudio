@@ -800,11 +800,61 @@ function packageMediaBlock(pkg, onPackageUpdated) {
     prog);
 }
 
+// Add more surfaces to a finished package. Platforms used to be fixed at
+// generation, so reaching one more surface meant a whole new package with a
+// split registry and score. Existing copy, approvals, and live URLs are
+// untouched; only the new platforms are written.
+function addPlatformsBlock(pkg, onPackageUpdated) {
+  const missing = appState.platforms.filter((p) => !pkg.platforms?.[p.id]);
+  if (!missing.length) return null;
+  const picked = new Set();
+  const prog = el('div', {});
+  const run = el('button', {
+    class: 'btn btn-primary btn-xs', onclick: async () => {
+      if (!picked.size) return toast('Pick at least one platform', 'err');
+      run.style.display = 'none';
+      prog.replaceChildren(spinner(`Writing ${picked.size} more asset${picked.size === 1 ? '' : 's'}…`));
+      try {
+        const { jobId } = await api.addPlatforms(pkg.id, [...picked]);
+        while (true) {
+          await new Promise((r) => setTimeout(r, 2500));
+          const job = await api.job(jobId);
+          if (job.status === 'done') {
+            const { package: updated } = await api.pkg(pkg.id);
+            Object.assign(pkg, updated);
+            toast(`${job.added.length} platform${job.added.length === 1 ? '' : 's'} added · rescored`);
+            onPackageUpdated?.();
+            return;
+          }
+          if (job.status === 'error') throw new Error(job.error || 'could not add platforms');
+          const p = job.progress || {};
+          prog.replaceChildren(spinner(`Writing ${p.done || 0}/${p.total || '…'} — ${(p.platform || '').replace(/_/g, ' ')}`));
+        }
+      } catch (err) { toast(err.message, 'err'); onPackageUpdated?.(); }
+    },
+  }, '✦ Add these platforms');
+  return el('div', { class: 'asset-field' },
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' }, `Add more surfaces (${missing.length} not in this package)`),
+      run),
+    el('p', { class: 'muted', style: 'margin:6px 0' },
+      'Writes native copy for each platform, grounded in the copy this package already carries, so the surfaces agree. Existing assets, approvals, and live URLs are left alone.'),
+    el('div', { class: 'chip-row' }, missing.map((p) => {
+      const chip = el('button', {
+        class: 'chip chip-toggle',
+        onclick: () => { picked.has(p.id) ? picked.delete(p.id) : picked.add(p.id); chip.classList.toggle('on'); },
+      }, p.label);
+      return chip;
+    })),
+    prog);
+}
+
 function metadataTab(pkg, onPackageUpdated) {
   const jsonldText = Object.entries(pkg.jsonld || {})
     .map(([k, v]) => `<!-- ${k} -->\n<script type="application/ld+json">\n${JSON.stringify(v, null, 2)}\n</script>`)
     .join('\n\n');
   return el('div', {},
+    addPlatformsBlock(pkg, onPackageUpdated),
     citationBlock(pkg, onPackageUpdated),
     eventBlock(pkg, onPackageUpdated),
     pkg.definition ? el('div', { class: 'asset-field' },

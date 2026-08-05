@@ -976,6 +976,38 @@ headings survive a paste, attached media on every card, split LinkedIn
 composer links (Write article vs New feed post), and the assistant
 instruction reframed so direction comes from her rather than from the page.
 
+**Add-platform capability built (build 6782214):** POST
+/api/packages/:id/platforms generates native copy for extra platforms into
+an EXISTING package, grounded in a digest of the copy that package already
+carries, so surfaces added weeks apart agree. Existing assets, approvals,
+published URLs, reshares and hand edits are untouched; tracked CTA links are
+minted for the new platforms; jsonld and score rebuild. Control in AI
+Metadata ("Add more surfaces"). This closes the last fixed-at-generation
+gap (media and the answer layer were already retrofittable).
+
+**Travel GHR package now carries 5 platforms** (linkedin live, plus gbp,
+facebook, instagram_carousel, alignable drafted), still 96 AI-Dominant with
+only cross_surface failing. AUDIT OF THE FOUR NEW ASSETS found four rule
+breaks that generation produced despite the doctrine and blocklist being in
+the system prompt, all fixed by hand:
+- facebook.post and alignable.post both wrote "under real budget pressure"
+  ("budget" is on her blocklist). Note the profile credentials were ALREADY
+  corrected, so the model reintroduced the word on its own.
+- gbp.qa_pairs asked "What does a corporate event travel advisor do that a
+  regular travel agent doesn't?" (fifth instance of differentiating by
+  contrast). Reframed to contrast with booking the trip yourself.
+- instagram_carousel.slides carried 3 em dashes.
+- gbp.post ran 1548 chars against a 1500 limit. First trim attempt cut it to
+  841 because the last 700 chars contain no ". " boundary; restored the full
+  post and tightened two phrases instead, one of which ("as a tour operator
+  (not only an agency)") was itself a contrast against agencies.
+
+**NEW RUBRIC CHECK no_dashes (build 6181224, weight 8):** law 9 was the
+oldest standing content rule and the ONLY one with no check behind it, so
+copy carrying three em dashes still scored 96. Now counted and scored.
+Hyphens unaffected. LESSON: every non-negotiable rule needs a check, or
+generation will quietly break it and the score will not notice.
+
 **Notes for next time:** the browser extension formatted 15 headings
 correctly but asked three rounds of clarifying questions and burned a lot of
 her plan usage before filling one field; for a single asset she is faster

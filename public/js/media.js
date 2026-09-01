@@ -348,18 +348,38 @@ export function renderLibrary(root) {
   const analyzeAll = async () => {
     const pending = items.filter((i) => !i.analyzed);
     if (!pending.length) return toast('Everything is already analyzed');
+    // The server already retries a rate-limited Claude call with backoff, so
+    // this is a second line of defense for a bulk run large enough to
+    // outlast that: any 429 that still reaches here pushes out a shared
+    // cooldown every worker waits out before its next request, so the whole
+    // batch slows down together instead of each item hammering separately.
+    const CONCURRENCY = 5;
     let n = 0;
     let stop = false;
-    status.replaceChildren(spinner(`Analyzing 0/${pending.length} (3 in parallel)…`));
-    const results = await pool(pending, 3, async (item) => {
+    let cooldownUntil = 0;
+    const waitForCooldown = async () => {
+      const wait = cooldownUntil - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    };
+    status.replaceChildren(spinner(`Analyzing 0/${pending.length} (${CONCURRENCY} in parallel)…`));
+    const results = await pool(pending, CONCURRENCY, async (item) => {
       if (stop) return null;
-      try {
-        await api.analyzeMedia(item.id);
-      } catch (err) {
-        if (/not configured/i.test(err.message)) { stop = true; }
-        throw err;
+      for (let attempt = 0; ; attempt++) {
+        await waitForCooldown();
+        try {
+          await api.analyzeMedia(item.id);
+          break;
+        } catch (err) {
+          if (/not configured/i.test(err.message)) { stop = true; throw err; }
+          if (err.status === 429 && attempt < 3) {
+            const delay = Math.min(20000, 3000 * 2 ** attempt) + Math.random() * 1000;
+            cooldownUntil = Math.max(cooldownUntil, Date.now() + delay);
+            continue;
+          }
+          throw err;
+        }
       }
-      status.replaceChildren(spinner(`Analyzing ${++n}/${pending.length} (3 in parallel)…`));
+      status.replaceChildren(spinner(`Analyzing ${++n}/${pending.length} (${CONCURRENCY} in parallel)…`));
       return item.id;
     });
     for (const r of results) {

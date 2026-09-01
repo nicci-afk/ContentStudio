@@ -1,6 +1,8 @@
 const j = (res) => {
   if (!res.ok) return res.json().catch(() => ({})).then((b) => {
-    throw new Error(b.error || `${res.status} ${res.statusText}`);
+    const err = new Error(b.error || `${res.status} ${res.statusText}`);
+    err.status = res.status;
+    throw err;
   });
   return res.json();
 };

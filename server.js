@@ -44,7 +44,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const wrap = (fn) => (req, res) => {
   Promise.resolve(fn(req, res)).catch((err) => {
-    const status = err instanceof ProviderError ? (err.status === 401 ? 424 : 502) : 500;
+    // 401 -> 424 (needs auth/config) and 429 pass through as-is (the
+    // provider client already retries transient 429s with backoff, so one
+    // reaching here means the caller should back off too); anything else
+    // provider-side collapses to a generic 502.
+    const status = err instanceof ProviderError
+      ? (err.status === 401 ? 424 : err.status === 429 ? 429 : 502)
+      : 500;
     res.status(status).json({ error: err.message, provider: err.provider || null });
   });
 };

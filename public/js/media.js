@@ -332,13 +332,16 @@ async function importFiles(files, onStatus, existing = []) {
 export function renderLibrary(root) {
   const container = el('div', { class: 'view' });
   let items = [];
+  let businessFilter = '';
   const aiReady = appState.health?.providers?.anthropic;
+  const businesses = appState.workspaces?.items || [];
+  const businessName = (id) => businesses.find((w) => w.id === id)?.name || 'Unknown business';
 
   const status = el('div', { class: 'import-status' });
   const grid = el('div', { class: 'media-grid' });
 
   const refresh = async () => {
-    items = (await api.media()).items;
+    items = (await api.media(businessFilter || undefined)).items;
     drawGrid();
   };
 
@@ -388,15 +391,24 @@ export function renderLibrary(root) {
         'On iPhone, tap Import and Safari opens your photo library — select as many photos and videos as you like. The studio extracts capture dates and GPS, then AI writes alt text, keywords, and story ideas for every asset.'));
       return;
     }
-    for (const item of items) grid.append(mediaCard(item, refresh));
+    for (const item of items) grid.append(mediaCard(item, refresh, businessName));
   };
+
+  const filterSelect = businesses.length > 1 ? el('select', {
+    class: 'input select media-business-filter',
+    title: 'Every business shares this library — this only filters which uploads are shown',
+    onchange: async (e) => { businessFilter = e.target.value; await refresh(); },
+  },
+    el('option', { value: '' }, 'All businesses'),
+    ...businesses.map((w) => el('option', { value: w.id }, w.name))) : null;
 
   container.append(
     el('div', { class: 'view-head' },
       el('div', {},
         el('h1', {}, 'Media Library'),
-        el('p', { class: 'sub' }, 'Your real photos and videos, enriched with AI-visibility metadata and matched to content.')),
+        el('p', { class: 'sub' }, 'Shared across every business. Your real photos and videos, enriched with AI-visibility metadata and matched to content.')),
       el('div', { class: 'row gap' },
+        filterSelect,
         el('label', { class: 'btn btn-primary', for: 'media-picker' }, '⬆ Import from device'),
         el('button', { class: 'btn btn-ghost', onclick: analyzeAll }, aiReady ? '✦ Analyze all' : '✦ Analyze all (needs Claude key)'))),
     fileInput, status, grid,
@@ -406,9 +418,10 @@ export function renderLibrary(root) {
   root.replaceChildren(container);
 }
 
-function mediaCard(item, refresh) {
+function mediaCard(item, refresh, businessName = () => null) {
   const detail = el('div', { class: 'media-detail' });
   let open = false;
+  const owners = (item.businesses || []).map(businessName).filter(Boolean);
 
   const card = el('div', { class: 'media-card' },
     el('div', {
@@ -426,7 +439,8 @@ function mediaCard(item, refresh) {
     el('div', { class: 'media-meta' },
       el('strong', {}, item.caption || item.name),
       item.takenAt ? el('span', { class: 'muted' }, new Date(item.takenAt).toLocaleDateString()) : null,
-      item.place ? el('span', { class: 'muted' }, `📍 ${item.place}`) : null),
+      item.place ? el('span', { class: 'muted' }, `📍 ${item.place}`) : null,
+      owners.length ? el('span', { class: 'muted', title: 'Uploaded via this business — every business can still use this asset' }, `🏷 ${owners.join(', ')}`) : null),
     detail,
   );
 

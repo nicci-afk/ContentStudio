@@ -26,7 +26,7 @@ export const api = {
   voiceDna: (files) => send('POST', '/api/voice-dna', { files }),
   removeVoiceSource: (name) => send('POST', '/api/voice-dna/remove', { name }),
 
-  media: () => get('/api/media'),
+  media: (businessId) => get(`/api/media${businessId ? `?business=${encodeURIComponent(businessId)}` : ''}`),
   addMedia: (item) => send('POST', '/api/media', item),
   uploadMediaOriginal: (id, file) =>
     fetch(`/api/media/${id}/original`, {

@@ -332,18 +332,13 @@ async function importFiles(files, onStatus, existing = []) {
 export function renderLibrary(root) {
   const container = el('div', { class: 'view' });
   let items = [];
-  let businessFilter = '';
   const aiReady = appState.health?.providers?.anthropic;
-  const businesses = appState.workspaces?.items || [];
-  const businessName = (id) => businesses.find((w) => w.id === id)?.name || 'Unknown business';
-  const selected = new Set();
 
   const status = el('div', { class: 'import-status' });
   const grid = el('div', { class: 'media-grid' });
-  const bulkBar = el('div', { class: 'row gap', hidden: true });
 
   const refresh = async () => {
-    items = (await api.media(businessFilter || undefined)).items;
+    items = (await api.media()).items;
     drawGrid();
   };
 
@@ -406,67 +401,15 @@ export function renderLibrary(root) {
     },
   });
 
-  const onToggleSelect = (id, checked) => {
-    if (checked) selected.add(id); else selected.delete(id);
-    drawBulkBar();
-  };
-
-  const drawBulkBar = () => {
-    if (!selected.size) { bulkBar.hidden = true; bulkBar.replaceChildren(); return; }
-    bulkBar.hidden = false;
-    let retagTo = '';
-    bulkBar.replaceChildren(
-      el('span', { class: 'muted' }, `${selected.size} selected`),
-      el('button', {
-        class: 'btn btn-ghost btn-xs',
-        title: 'Remove any business tag — the asset stays in the shared library, usable by every business',
-        onclick: async () => {
-          await Promise.all([...selected].map((id) => api.updateMedia(id, { businesses: [] })));
-          toast(`Cleared the business tag on ${selected.size} item(s)`);
-          selected.clear();
-          await refresh();
-        },
-      }, 'Clear business tag'),
-      businesses.length ? el('select', {
-        class: 'input select',
-        onchange: (e) => { retagTo = e.target.value; },
-      },
-        el('option', { value: '' }, 'Tag as…'),
-        ...businesses.map((w) => el('option', { value: w.id }, w.name))) : null,
-      businesses.length ? el('button', {
-        class: 'btn btn-ghost btn-xs',
-        onclick: async () => {
-          if (!retagTo) return toast('Pick a business first', 'err');
-          await Promise.all([...selected].map((id) => api.updateMedia(id, { businesses: [retagTo] })));
-          toast(`Tagged ${selected.size} item(s) as ${businessName(retagTo)}`);
-          selected.clear();
-          await refresh();
-        },
-      }, 'Apply') : null,
-      el('button', { class: 'btn btn-ghost btn-xs', onclick: () => { selected.clear(); drawGrid(); } }, 'Cancel'),
-    );
-  };
-
   const drawGrid = () => {
     grid.replaceChildren();
-    drawBulkBar();
     if (!items.length) {
       grid.append(emptyState('Your library is empty',
         'On iPhone, tap Import and Safari opens your photo library — select as many photos and videos as you like. The studio extracts capture dates and GPS, then AI writes alt text, keywords, and story ideas for every asset.'));
       return;
     }
-    for (const item of items) {
-      grid.append(mediaCard(item, refresh, businessName, businesses, selected.has(item.id), onToggleSelect));
-    }
+    for (const item of items) grid.append(mediaCard(item, refresh));
   };
-
-  const filterSelect = businesses.length > 1 ? el('select', {
-    class: 'input select media-business-filter',
-    title: 'Every business shares this library — this only filters which uploads are shown',
-    onchange: async (e) => { businessFilter = e.target.value; await refresh(); },
-  },
-    el('option', { value: '' }, 'All businesses'),
-    ...businesses.map((w) => el('option', { value: w.id }, w.name))) : null;
 
   container.append(
     el('div', { class: 'view-head' },
@@ -474,32 +417,24 @@ export function renderLibrary(root) {
         el('h1', {}, 'Media Library'),
         el('p', { class: 'sub' }, 'Shared across every business. Your real photos and videos, enriched with AI-visibility metadata and matched to content.')),
       el('div', { class: 'row gap' },
-        filterSelect,
         el('label', { class: 'btn btn-primary', for: 'media-picker' }, '⬆ Import from device'),
         el('button', { class: 'btn btn-ghost', onclick: analyzeAll }, aiReady ? '✦ Analyze all' : '✦ Analyze all (needs Claude key)'))),
-    fileInput, status, bulkBar, grid,
+    fileInput, status, grid,
   );
 
   refresh();
   root.replaceChildren(container);
 }
 
-function mediaCard(item, refresh, businessName = () => null, businesses = [], isSelected = false, onToggleSelect = () => {}) {
+function mediaCard(item, refresh) {
   const detail = el('div', { class: 'media-detail' });
   let open = false;
-  const owners = (item.businesses || []).map(businessName).filter(Boolean);
 
   const card = el('div', { class: 'media-card' },
     el('div', {
       class: 'media-thumb-wrap',
+      onclick: () => { open = !open; drawDetail(); },
     },
-      el('input', {
-        type: 'checkbox', class: 'media-select', checked: isSelected,
-        title: 'Select for a bulk business-tag change',
-        onclick: (e) => e.stopPropagation(),
-        onchange: (e) => onToggleSelect(item.id, e.target.checked),
-      }),
-      el('div', { style: 'cursor:pointer', onclick: () => { open = !open; drawDetail(); } },
       el('img', { class: 'media-thumb', src: `/api/media/${item.id}/thumb`, alt: item.alt || item.name, loading: 'lazy' }),
       el('span', {
         class: 'media-kind',
@@ -507,12 +442,11 @@ function mediaCard(item, refresh, businessName = () => null, businesses = [], is
           ? 'Full footage stored: renders use the real moving clip'
           : 'Only a preview frame is stored. Re-import this video file and the footage attaches automatically, so renders can use the real clip'),
       }, item.kind === 'video' ? (item.hasOriginal ? '▶ video' : '▶ frame only') : 'photo'),
-      item.analyzed ? el('span', { class: 'media-analyzed' }, '✦') : null)),
+      item.analyzed ? el('span', { class: 'media-analyzed' }, '✦') : null),
     el('div', { class: 'media-meta' },
       el('strong', {}, item.caption || item.name),
       item.takenAt ? el('span', { class: 'muted' }, new Date(item.takenAt).toLocaleDateString()) : null,
-      item.place ? el('span', { class: 'muted' }, `📍 ${item.place}`) : null,
-      owners.length ? el('span', { class: 'muted', title: 'Uploaded via this business — every business can still use this asset' }, `🏷 ${owners.join(', ')}`) : null),
+      item.place ? el('span', { class: 'muted' }, `📍 ${item.place}`) : null),
     detail,
   );
 
@@ -529,22 +463,6 @@ function mediaCard(item, refresh, businessName = () => null, businesses = [], is
         el('span', { class: 'field-label' }, 'Alt text'), altInput,
         item.keywords?.length ? el('div', { class: 'chip-row' }, item.keywords.map((k) => el('span', { class: 'chip' }, k))) : null,
         item.storyIdeas?.length ? el('ul', { class: 'plain-list' }, item.storyIdeas.map((s) => el('li', {}, `💡 ${s}`))) : null,
-        businesses.length ? el('div', { class: 'detail-block' },
-          el('span', { class: 'field-label' }, 'Tagged to (click to toggle — unrelated to who can use it)'),
-          el('div', { class: 'chip-row' }, businesses.map((w) => {
-            const tagged = (item.businesses || []).includes(w.id);
-            return el('span', {
-              class: `chip chip-toggle${tagged ? ' on' : ''}`,
-              onclick: async () => {
-                const next = tagged
-                  ? (item.businesses || []).filter((id) => id !== w.id)
-                  : [...(item.businesses || []), w.id];
-                item.businesses = next;
-                await api.updateMedia(item.id, { businesses: next });
-                drawDetail();
-              },
-            }, w.name);
-          }))) : null,
         el('div', { class: 'row gap' },
           el('a', {
             class: 'btn btn-ghost btn-xs',

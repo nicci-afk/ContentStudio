@@ -17,7 +17,7 @@ if (fs.existsSync(envFile)) {
 
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace,
-  listSnapshots, restoreSnapshot, currentWorkspaceId } =
+  listSnapshots, restoreSnapshot } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -190,15 +190,13 @@ app.post('/api/voice-dna/remove', wrap(async (req, res) => {
 
 // ---- media ---------------------------------------------------------------
 
-// The library is shared across every business; ?business=<workspaceId>
-// filters the grid to what that business brought in (provenance only —
-// nothing restricts AI selection or manual picks to it).
-app.get('/api/media', (req, res) => {
-  const { business } = req.query;
-  let items = mediaStore.get().items;
-  if (business) items = items.filter((i) => (i.businesses || []).includes(business));
-  res.json({ items });
-});
+// The library is shared across every business — every workspace's AI
+// selection and manual picks can use anything in it, so uploads carry no
+// per-business tag at all (a prior version auto-tagged with whatever
+// workspace happened to be active at upload time, which just meant an
+// import landed under the wrong label whenever that workspace wasn't the
+// one intended).
+app.get('/api/media', (req, res) => res.json({ items: mediaStore.get().items }));
 
 app.post('/api/media', wrap(async (req, res) => {
   const { name, mime, kind, size, w, h, takenAt, gps, thumbB64, analysisB64, renderB64 } = req.body;
@@ -212,7 +210,6 @@ app.post('/api/media', wrap(async (req, res) => {
     takenAt: takenAt || null, gps: gps || null,
     alt: null, caption: null, keywords: [], place: null, quality: null, storyIdeas: [],
     analyzed: false, hasOriginal: false, addedAt: new Date().toISOString(),
-    businesses: [currentWorkspaceId()],
   };
   mediaStore.update((m) => ({ items: [record, ...m.items] }));
   res.json({ item: record });

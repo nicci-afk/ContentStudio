@@ -788,8 +788,12 @@ function packageMediaBlock(pkg, onPackageUpdated) {
   return el('div', { class: 'asset-field' },
     el('div', { class: 'row spread' },
       el('span', { class: 'field-label' },
-        `Media in this package${has ? (pkg.mediaSelectionMode === 'ai' ? ' (AI-selected)' : '') : ' (none attached yet)'}`),
+        `Media in this package${has ? (pkg.mediaSelectionMode === 'ai' ? ' (AI-selected)' : pkg.mediaSelectionMode === 'heuristic' ? ' (keyword-matched, not AI-ranked)' : '') : ' (none attached yet)'}`),
       btn),
+    pkg.mediaSelectionError
+      ? el('p', { class: 'warn', style: 'margin:6px 0 0' },
+          `The AI ranking pass did not complete (${pkg.mediaSelectionError}), so these picks fell back to keyword matching. Re-pick to try again.`)
+      : null,
     has
       ? el('div', { class: 'mini-media-row' }, pkg.mediaIds.map((id) => el('div', { class: 'pick-cell' },
           el('a', { href: `/api/media/${id}/file`, target: '_blank', title: 'Open the full-size file for posting' },

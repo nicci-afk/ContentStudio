@@ -388,6 +388,7 @@ app.post('/api/generate', wrap(async (req, res) => {
     if (mediaSelection) {
       pkg.mediaSelection = mediaSelection.reasons;
       pkg.mediaSelectionMode = mediaSelection.mode;
+      pkg.mediaSelectionError = mediaSelection.error || null;
     }
     packageStore.update((s) => ({ items: [pkg, ...s.items] }));
     job.package = pkg;
@@ -822,6 +823,7 @@ app.post('/api/packages/:id/media', wrap(async (req, res) => {
   let ids = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds.filter((id) => items.some((m) => m.id === id)) : [];
   let reasons = {};
   let mode = 'manual';
+  let selectionError = null;
   if (!ids.length) {
     const pillar = (state.profile.pillars || []).find((p) => p.id === pkg.pillarId) || null;
     const sel = await selectMedia({
@@ -831,6 +833,7 @@ app.post('/api/packages/:id/media', wrap(async (req, res) => {
     ids = sel.ids;
     reasons = sel.reasons;
     mode = sel.mode;
+    selectionError = sel.error || null;
   }
   if (!ids.length) return res.status(400).json({ error: 'no usable media could be selected' });
 
@@ -842,6 +845,7 @@ app.post('/api/packages/:id/media', wrap(async (req, res) => {
       p.mediaIds = ids;
       p.mediaSelection = reasons;
       p.mediaSelectionMode = mode;
+      p.mediaSelectionError = selectionError;
       p.altTexts = { ...(p.altTexts || {}) };
       for (const id of ids) {
         const m = items.find((x) => x.id === id);

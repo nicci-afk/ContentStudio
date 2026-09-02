@@ -847,10 +847,12 @@ app.post('/api/packages/:id/media', wrap(async (req, res) => {
       p.mediaSelectionMode = mode;
       p.mediaSelectionError = selectionError;
       p.altTexts = { ...(p.altTexts || {}) };
+      p.mediaKinds = {};
       for (const id of ids) {
         const m = items.find((x) => x.id === id);
         const alt = clamp(m?.alt || m?.caption || m?.name);
         if (alt) p.altTexts[id] = alt;
+        if (m?.kind) p.mediaKinds[id] = m.kind;
       }
       p.jsonld = buildJsonLd(p, state.profile);
       p.visibility = scorePackage(p, state.profile);

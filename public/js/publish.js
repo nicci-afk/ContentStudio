@@ -244,14 +244,37 @@ function mediaLinks(pkg, platformId, spec, renders) {
   }
   // Every other surface still needs a picture: an article cover, a post
   // image. The package's attached media is offered in selection order, so
-  // the first one is the AI's pick for the strongest opening shot.
-  for (const [i, id] of (pkg.mediaIds || []).slice(0, 8).entries()) {
+  // the first one is the AI's pick for the strongest opening shot. A video
+  // item's kind used to get papered over (labeled "image N", downloaded as
+  // "...jpg" even though the server actually serves the real .mov/.mp4
+  // file), which meant an all-video AI pick handed a platform that only
+  // takes photos a set of unusable files with no clue why. Label each
+  // asset by what it actually is instead.
+  let imgCount = 0;
+  for (const id of (pkg.mediaIds || []).slice(0, 8)) {
     const alt = pkg.altTexts?.[id] || '';
+    const kind = pkg.mediaKinds?.[id]; // absent on packages built before this field existed
+    if (kind === 'video') {
+      links.push({
+        label: `⬇ video clip (not a still image)${alt ? `: ${alt.slice(0, 40)}` : ''}`,
+        href: `/api/media/${id}/file`,
+        download: `${slug}-clip.mp4`,
+        alt,
+      });
+      continue;
+    }
+    imgCount += 1;
     links.push({
-      label: `⬇ ${i === 0 ? 'cover image' : `image ${i + 1}`}${alt ? `: ${alt.slice(0, 46)}` : ''}`,
+      label: `⬇ ${imgCount === 1 ? 'cover image' : `image ${imgCount}`}${alt ? `: ${alt.slice(0, 46)}` : ''}`,
       href: `/api/media/${id}/file`,
-      download: `${slug}-${i + 1}.jpg`,
+      download: `${slug}-${imgCount}.jpg`,
       alt,
+    });
+  }
+  if (!imgCount && links.length) {
+    links.unshift({
+      label: 'No still image attached, only video. Pick media from the Library first if this platform needs a photo.',
+      href: null,
     });
   }
   return links;

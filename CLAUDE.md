@@ -1065,6 +1065,99 @@ Highest leverage first; 1-3 build directly on the section-based renderer:
 4. **Multi-tenant SaaS phase** — accounts, encrypted per-user provider keys,
    Postgres, billing (only after the content engine is validated)
 
+## Session 9 (2026-09-02/03): villa Countdown package + three production bugs found and fixed
+
+**Standards sweep ran but is NOT deployed.** Branch
+`claude/content-studio-standards-sweep-x4uzr0` (commit 9bef570) redid a
+monthly sweep whose original commit was lost (git proxy had rejected the
+push in the session that made it). Cleaned up 15 stray em/en dashes in
+`lib/platforms.js` predating the no-dashes rule, refreshed algo/cadence
+text for Instagram, TikTok, LinkedIn, Pinterest, GBP, Bing, Facebook,
+Reddit with September 2026 findings, and wrote `docs/STANDARDS-WATCH.md`
+with sources and three flagged decision items (llms.txt now has one real
+consumer, Claude, worth reconsidering; Google deprecated the FAQ rich
+result though FAQPage schema itself is still fine; Facebook's outbound
+link policy is disputed in current reporting). This branch was never
+merged into the deploy branch; still needs a fast-forward when the user
+is ready to review it.
+
+**Built and drafted (not yet published): the weekly Countdown update,**
+package `262b7214cccf0430` in Conscious Creator, pillar "The Invitation"
+(`ka0k0dzv`), series "The Countdown" (`qj0jdick`). Topic: acceptances
+going out Friday plus villa-scouting expansion news, exact CTA "Let us
+know what kind of amenities you're looking for in a villa" baked into
+every asset verbatim. Platforms: facebook (its `group_variant` field is
+written for the private Conscious Creator FB group specifically, peer
+voice not a sales pitch), gbp, linkedin (full article plus feed post),
+pinterest, bing, instagram_carousel. Score 96 AI-Dominant. Facebook,
+LinkedIn, and GBP are approved for publishing; Pinterest, Bing, and
+Instagram Carousel are drafted but not yet approved (her call, still
+under review). Media currently attached: 8 real verified still images,
+the 3 villa architecture photos she confirmed are hers to use (from the
+owner's site, permission granted) plus 5 candid Akumal/Tulum lifestyle
+shots, picked by hand after the AI/heuristic passes below. Nothing has
+been posted yet; no `publishedUrls` registered.
+
+**Three production bugs found while building this, all fixed and
+deployed (in order, each verified against a local mock before pushing,
+no renders were in flight for any of the three pushes):**
+
+1. **Silent AI media-selection fallback (a79c4ff).** `selectMedia()` in
+   `lib/engine.js` swallowed every AI-ranking failure in a bare catch and
+   fell back to keyword-plus-quality heuristic ranking with zero record of
+   why, indistinguishable from "no Claude key configured." Root cause was
+   Anthropic truncating the reply mid-JSON-string under the now much
+   larger shared (902-item, cross-workspace) catalog; 1500 output tokens
+   and one retry weren't enough headroom. Fixed: 2500 tokens, 2 retries,
+   and the fallback now carries a real error message through to
+   `pkg.mediaSelectionError`, surfaced in the AI Metadata panel. Same
+   silent-fallback shape as the answer-layer and carousel-matching bugs
+   fixed in earlier sessions; this was the one path that still lacked it.
+2. **Publish Run mislabeling video as downloadable images (0c6f765).**
+   Once AI selection came back healthy it picked 8 real videos for this
+   package, story-arc reasoning was genuinely strong, but every non-video
+   platform card (Facebook, LinkedIn, GBP, Pinterest, Bing) labeled every
+   attached asset "cover image" / "image N" and offered a fake `...jpg`
+   download regardless of real kind. The server was actually serving the
+   correct `.mov`/`.mp4` file underneath (Content-Disposition wins over
+   the anchor's download attribute), so nothing was corrupted on disk,
+   but LinkedIn's photo uploader correctly rejected a video file it had
+   no way to know it was getting. Fixed: `pkg.mediaKinds` (id to kind)
+   now rides alongside the existing `altTexts` map, set at generation and
+   on every `/media` re-pick; `mediaLinks()` in `publish.js` labels video
+   items as video clips with a real filename instead of folding them into
+   the image count, and flags the card if every attached asset turned out
+   to be video. Packages built before this landed have no `mediaKinds`
+   and default to being treated as images (harmless unless a pre-existing
+   attachment is actually video).
+3. **LinkedIn's article composer defaulting to an existing Newsletter
+   (4dc904e).** The generated LinkedIn article for this package landed
+   under her LinkedIn Newsletter "Expedition Intelligence" instead of as
+   a standalone Article. Confirmed this is NOT a ContentStudio bug: the
+   package data has zero trace of that phrase anywhere and never had a
+   newsletter platform. She confirmed LinkedIn's own composer defaults to
+   an existing Newsletter on her profile whenever she opens the article
+   editor. "Expedition Intelligence" is a newsletter she already has set
+   up on LinkedIn itself, reserved for a future separate brand/workspace
+   she plans to build later, not yet a ContentStudio workspace. Fixed:
+   one line added to the copyable Claude-in-Chrome instruction in
+   `publish.js` telling it to decline the Newsletter option and publish
+   as a standalone Article unless told a given card is meant to be a
+   newsletter issue. WATCH FOR: when that brand is actually built, this
+   guard will need a carve-out so its LinkedIn cards CAN target that
+   Newsletter on purpose.
+
+**Operational note for the next session doing magic-link sign-in via
+Gmail:** the Gmail MCP tool's PLAIN_TEXT/HTML conversion of the sign-in
+email corrupted the token (a quoted-printable `=3D75...` sequence decoded
+to `u0...`, silently dropping two hex characters). The verify call
+returned "invalid or expired" until the token was reconstructed from the
+RAW MIME source (`get_message` with `messageFormat: RAW`, base64url
+decode, read the literal `token=3D<hex>` line, the `=3D` is the QP
+escape for a literal `=`). If a future session's magic-link verify fails
+immediately after requesting a fresh link, check this before assuming
+the link expired or assuming a wrong-password situation.
+
 ## Docs
 
 - `README.md` — setup, full API reference, deploy, auth

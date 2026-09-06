@@ -17,7 +17,7 @@ if (fs.existsSync(envFile)) {
 
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace,
-  listSnapshots, restoreSnapshot } =
+  listSnapshots, restoreSnapshot, readWorkspace } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -73,8 +73,25 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/platforms', (req, res) => res.json({ platforms: platformList() }));
 
+// Workspace-scoped on purpose: this is a public, unauthenticated route a
+// crawler can hit at any time, so it must never depend on whichever
+// workspace a human happens to have open in the UI right now (the bug the
+// bare stateStore/packageStore singletons have everywhere else). This URL
+// on contentstudio-zc9j.onrender.com is a source for each brand's own
+// website to fetch from, not the URL a crawler will ever check: llms.txt
+// is only ever looked for at a site's own domain root, so the real fix per
+// brand is getting this content served from https://<their domain>/llms.txt.
 app.get('/llms.txt', (req, res) => {
-  res.type('text/plain').send(buildLlmsTxt(stateStore.get().profile, packageStore.get().items));
+  const id = req.query.workspace;
+  const ws = id ? readWorkspace(String(id)) : null;
+  if (!ws) {
+    const items = listWorkspaces().items;
+    res.status(400).type('text/plain').send(
+      `Add ?workspace=<id> to this URL. Known workspaces:\n${items.map((w) => `${w.id}  ${w.name}`).join('\n')}`
+    );
+    return;
+  }
+  res.type('text/plain').send(buildLlmsTxt(ws.state.profile, ws.packages.items));
 });
 
 // ---- workspaces (one per business; all data below is workspace-scoped) ---

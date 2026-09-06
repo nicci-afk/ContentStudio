@@ -1162,6 +1162,90 @@ escape for a literal `=`). If a future session's magic-link verify fails
 immediately after requesting a fresh link, check this before assuming
 the link expired or assuming a wrong-password situation.
 
+## Session 9, continued (2026-09-06): standards-sweep merge, three more fixes, testimonial store, entity hub
+
+**Standards-sweep branch merged and deployed (71052ea).** No conflicts
+(disjoint files from everything else this session touched). Verified
+locally and against the live villa package (still 96) before and after.
+
+**Three more production bugs found and fixed, same session:**
+1. `/llms.txt` was reading the process-wide active-workspace singleton,
+   so a public crawler got whichever of the four brands a human last
+   clicked into in the UI, with no way to know which. Fixed (700cb1e):
+   `lib/store.js` gained `readWorkspace(id)`, a direct per-workspace read
+   that bypasses the active pointer; `/llms.txt` now requires
+   `?workspace=<id>` and 400s with the known workspace list otherwise.
+2. `claudeJson`'s default retry count bumped 1 to 2 (c8cdce7): the same
+   transient truncated-JSON failure had now hit three unrelated call
+   sites in one session; one retry was not reliably enough.
+3. Carousel-slide matching was still failing every attempt after that,
+   a JSON syntax error ("Expected ',' or ']'"), not truncation, most
+   likely the model echoing an unescaped quote from a caption into a
+   "reason"/"alt" value. Fixed (6ad97f9): both matchCarouselSlides and
+   selectMedia's prompts now explicitly forbid a literal double-quote
+   inside those string values. Confirmed fixed: the villa package's
+   carousel now matches in full AI mode with genuinely slide-specific
+   reasoning (a golden-hour balcony shot for the cover, the white SUV
+   for "boots on the ground," etc.), not the heuristic fallback.
+
+**llms.txt investigated for real domain deployment, found ALREADY DONE,
+better than ContentStudio would produce, so nothing was pushed.** Found
+the Lovable projects (workspace `CxUTUqvjE917pcaEwIut`); before pushing
+anything, checked what is actually live. Both `consciouscreator.app/llms.txt`
+and `travelghr.com/llms.txt` return 200 with rich, hand-crafted content
+(program details, host/educator bios, philosophy, key pages, journal
+feed, explicit AI-attribution instructions) that is more detailed than
+`buildLlmsTxt()` generates. Built independently of ContentStudio,
+presumably directly on the sites. Pushing the generic version would have
+been a downgrade, so both sites were left untouched. The workspace-scoping
+fix above still stands on its own (it fixed a real bug), it just is not
+the thing that needed to reach the real domains.
+
+**Testimonial/proof store and entity hub: both built and deployed
+(299b4b5), the two previously-unbuilt items from the 2026-07-22 AI-visibility
+roadmap (items 4 and 5), directly relevant to Google's own E-E-A-T
+guidance as well as AI citation.**
+- `profile.testimonials`: name, context, quote, date, consent. New
+  "Testimonials" tab (`interview.js`/`app.js`), uses the existing generic
+  `PATCH /api/state` mechanism, no new routes. `masterContext()` cites
+  only consented testimonials verbatim to generation with an explicit
+  never-invent-a-different-one guard. New rubric check
+  `testimonial_proof` (skips with zero testimonials on file, otherwise
+  wants a consented name to actually appear in the finished copy).
+  Review schema attaches to the Event/Offer being reviewed, never to the
+  business itself (a self-rated LocalBusiness reads as self-serving);
+  only a consented testimonial is eligible.
+- Entity hub: `personLD`'s `sameAs` is now the union of `person.sameAs`
+  and every `biz.links` value, deduped, computed at JSON-LD build time.
+  New standalone `jsonld.entity` block (a Person entity independent of
+  whatever platforms a given package touches, carrying NAP plus
+  `sameAs`), rides along automatically in the existing Website Kit
+  export (it already dumps every `pkg.jsonld` value, no new plumbing
+  needed). New rubric checks `entity_sameas` (>=3 canonical profiles,
+  skips with no person on file) and `nap_consistency` (the on-file phone
+  must appear in the package copy, skips with no phone on file). Added a
+  `phone` question to the Story Interview. Also fixed
+  `businessFromAnswers` silently wiping fields the interview form does
+  not ask about (`schemaType`, `areaServed`, `phone` set outside the
+  form) on every save; it now merges onto the existing business object
+  instead of replacing it.
+- Verified locally (mock profile/package assertions for the sameAs
+  union, NAP pass/fail, testimonial-cited pass/fail, non-consented
+  testimonial excluded from both generation context and Review schema)
+  and against the live villa package after deploy: score held at 96,
+  both new entity/testimonial checks pass cleanly with her
+  testimonial-free, phone-free profile (as designed: nothing to cite or
+  match yet is not a failure).
+- She asked to pull real reviews from Google/Facebook to seed the
+  store. Both come back login-walled or bot-checked on a plain fetch (no
+  GBP/Meta Business connector in this session), so nothing was invented
+  to fill the gap; she said to add them later, herself pasting the text
+  once she has it, or by connecting a proper GBP/Meta connector if she
+  wants this to pull automatically.
+
+All of the above already confirmed live in production (build `299b4b5`
+matches `/api/health` as of this session).
+
 ## Docs
 
 - `README.md` — setup, full API reference, deploy, auth

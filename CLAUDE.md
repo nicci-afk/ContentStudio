@@ -1067,19 +1067,23 @@ Highest leverage first; 1-3 build directly on the section-based renderer:
 
 ## Session 9 (2026-09-02/03): villa Countdown package + three production bugs found and fixed
 
-**Standards sweep ran but is NOT deployed.** Branch
-`claude/content-studio-standards-sweep-x4uzr0` (commit 9bef570) redid a
-monthly sweep whose original commit was lost (git proxy had rejected the
-push in the session that made it). Cleaned up 15 stray em/en dashes in
-`lib/platforms.js` predating the no-dashes rule, refreshed algo/cadence
-text for Instagram, TikTok, LinkedIn, Pinterest, GBP, Bing, Facebook,
-Reddit with September 2026 findings, and wrote `docs/STANDARDS-WATCH.md`
-with sources and three flagged decision items (llms.txt now has one real
-consumer, Claude, worth reconsidering; Google deprecated the FAQ rich
-result though FAQPage schema itself is still fine; Facebook's outbound
-link policy is disputed in current reporting). This branch was never
-merged into the deploy branch; still needs a fast-forward when the user
-is ready to review it.
+**Standards sweep: MERGED AND DEPLOYED (2026-09-06, merge commit
+71052ea).** Branch `claude/content-studio-standards-sweep-x4uzr0`
+(commit 9bef570) redid a monthly sweep whose original commit was lost
+(git proxy had rejected the push in the session that made it). Cleaned
+up 15 stray em/en dashes in `lib/platforms.js` predating the no-dashes
+rule, refreshed algo/cadence text for Instagram, TikTok, LinkedIn,
+Pinterest, GBP, Bing, Facebook, Reddit with September 2026 findings, and
+wrote `docs/STANDARDS-WATCH.md` with sources and three flagged decision
+items (llms.txt now has one real consumer, Claude, worth reconsidering;
+Google deprecated the FAQ rich result though FAQPage schema itself is
+still fine; Facebook's outbound link policy is disputed in current
+reporting, still unresolved, her call). No file overlap with the three
+bug fixes below (sweep touched only `lib/platforms.js` and the new
+`docs/STANDARDS-WATCH.md`), so the merge was clean, no conflicts.
+Verified locally (syntax check on every touched file, boot, platforms.js
+confirmed still dash-free) and against production after deploy (villa
+package 262b7214cccf0430 still scores 96, approvals and media intact).
 
 **Built and drafted (not yet published): the weekly Countdown update,**
 package `262b7214cccf0430` in Conscious Creator, pillar "The Invitation"

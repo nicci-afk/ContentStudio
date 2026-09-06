@@ -1,6 +1,6 @@
 import { api, appState } from './api.js';
 import { el, toast, spinner } from './ui.js';
-import { renderInterview, renderVoice } from './interview.js';
+import { renderInterview, renderVoice, renderTestimonials } from './interview.js';
 import { renderLibrary } from './media.js';
 import { renderStrategy } from './strategy.js';
 import { renderCreate } from './create.js';
@@ -11,6 +11,7 @@ const ROUTES = [
   { path: 'dashboard', label: 'Dashboard', icon: '◈', render: renderDashboard },
   { path: 'interview', label: 'Story Interview', icon: '✦', render: renderInterview },
   { path: 'voice-dna', label: 'Voice DNA', icon: '𝔸', render: renderVoice },
+  { path: 'testimonials', label: 'Testimonials', icon: '★', render: renderTestimonials },
   { path: 'library', label: 'Media Library', icon: '▣', render: renderLibrary },
   { path: 'strategy', label: 'Pillars & Series', icon: '≋', render: renderStrategy },
   { path: 'create', label: 'Create', icon: '⚡', render: renderCreate },

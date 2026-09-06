@@ -28,6 +28,7 @@ const SECTIONS = [
       { key: 'industry', label: 'Industry', input: 'text' },
       { key: 'niche', label: 'Specific niche', input: 'text', hint: 'The narrower the niche, the easier to become THE cited answer' },
       { key: 'location', label: 'City / region', input: 'text', hint: 'Feeds local AI answers (Google, Copilot, Maps)' },
+      { key: 'phone', label: 'Business phone', input: 'text', hint: 'Must read identically here, on GBP, and on Bing Places — inconsistent NAP data undermines local ranking' },
       { key: 'audience', label: 'Who you serve', input: 'area' },
       { key: 'offers', label: 'What you sell / offer', input: 'area' },
       { key: 'website', label: 'Website URL', input: 'text' },
@@ -108,10 +109,10 @@ const SECTIONS = [
 function businessFromAnswers(a) {
   return {
     name: a.name || '', tagline: a.tagline || '', industry: a.industry || '',
-    niche: a.niche || '', location: a.location || '', audience: a.audience || '',
+    niche: a.niche || '', location: a.location || '', phone: a.phone || '', audience: a.audience || '',
     offers: a.offers || '', localBusiness: true,
     neverMention: (a.neverMention || '').split(',').map((s) => s.trim()).filter(Boolean),
-    person: { name: a.personName || '', title: a.personTitle || '', credentials: a.credentials || '', sameAs: [a.youtube, a.instagram].filter(Boolean) },
+    person: { name: a.personName || '', title: a.personTitle || '', credentials: a.credentials || '', sameAs: [a.youtube, a.instagram, a.gbp].filter(Boolean) },
     links: { website: a.website || '', youtube: a.youtube || '', instagram: a.instagram || '', gbp: a.gbp || '' },
   };
 }
@@ -124,7 +125,7 @@ export function renderInterview(root) {
     personName: answers.personName ?? biz.person?.name, personTitle: answers.personTitle ?? biz.person?.title,
     credentials: answers.credentials ?? biz.person?.credentials,
     industry: answers.industry ?? biz.industry, niche: answers.niche ?? biz.niche,
-    location: answers.location ?? biz.location, audience: answers.audience ?? biz.audience,
+    location: answers.location ?? biz.location, phone: answers.phone ?? biz.phone, audience: answers.audience ?? biz.audience,
     offers: answers.offers ?? biz.offers,
     website: answers.website ?? biz.links?.website, youtube: answers.youtube ?? biz.links?.youtube,
     instagram: answers.instagram ?? biz.links?.instagram, gbp: answers.gbp ?? biz.links?.gbp,
@@ -135,7 +136,11 @@ export function renderInterview(root) {
   const container = el('div', { class: 'view' });
 
   const persist = async () => {
-    appState.state.profile.business = businessFromAnswers(answers);
+    // Merge rather than replace: fields this form never asks about
+    // (schemaType, areaServed, and anything else set outside the
+    // interview) must survive a save here, not get silently wiped because
+    // businessFromAnswers only knows about its own questions.
+    appState.state.profile.business = { ...appState.state.profile.business, ...businessFromAnswers(answers) };
     appState.state.profile.interview = { ...(appState.state.profile.interview || {}), answers };
     await appState.save();
   };
@@ -280,5 +285,88 @@ export function renderVoice(root) {
     container.append(emptyState('No voice sources yet', 'Upload 2-5 files of your real writing for the strongest fingerprint.'));
   }
 
+  root.replaceChildren(container);
+}
+
+// ---- Testimonials / proof store ------------------------------------------
+// Consented client outcomes: the concrete "According to [name], [result]"
+// proof E-E-A-T and Google ranking both reward. Generation only ever cites
+// what is stored here verbatim (never invents a testimonial), and only a
+// consented one is eligible to become Review schema.
+export function renderTestimonials(root) {
+  const container = el('div', { class: 'view' });
+
+  const persist = async (list) => {
+    appState.state.profile.testimonials = list;
+    await appState.save();
+  };
+
+  const draw = () => {
+    container.replaceChildren();
+    const list = appState.profile.testimonials || [];
+
+    container.append(
+      el('div', { class: 'view-head' },
+        el('div', {},
+          el('h1', {}, 'Testimonials & proof'),
+          el('p', { class: 'sub' },
+            'Real, attributed client outcomes. AI engines lift "According to [name], [result]" verbatim, and it is the same first-hand proof Google\'s own ranking guidelines reward. Generation only ever cites what is stored here, word for word, and only a testimonial marked consented can become published Review schema.'))),
+    );
+
+    const rows = list.map((t, i) => el('div', { class: 'card' },
+      el('div', { class: 'row spread' },
+        el('strong', {}, t.name || '(no name)'),
+        el('div', { class: 'row gap' },
+          t.consent ? el('span', { class: 'chip' }, 'Consented ✓') : el('span', { class: 'chip warn' }, 'Not consented'),
+          el('button', {
+            class: 'btn btn-danger btn-xs', onclick: async () => {
+              const next = list.filter((_, idx) => idx !== i);
+              await persist(next);
+              draw();
+              toast('Testimonial removed');
+            },
+          }, '×'))),
+      t.context ? el('p', { class: 'muted', style: 'margin:4px 0' }, t.context) : null,
+      t.quote ? el('blockquote', { class: 'sample' }, t.quote) : null,
+      t.date ? el('p', { class: 'muted', style: 'margin:4px 0 0;font-size:12px' }, t.date) : null,
+    ));
+    if (rows.length) container.append(...rows);
+    else container.append(emptyState('No testimonials yet', 'Add a real client outcome below. Nothing here is ever invented by generation, only cited when you add it.'));
+
+    const nameInput = textInput({ placeholder: 'Client name (as they want to be credited)' });
+    const contextInput = textInput({ placeholder: 'Context, e.g. "2026 Akumal retreat attendee"' });
+    const quoteInput = textArea({ placeholder: 'Their words, or the specific outcome, quoted or paraphrased accurately', rows: 3 });
+    const dateInput = textInput({ placeholder: 'Date (YYYY-MM-DD)', type: 'date' });
+    const consentInput = el('input', { type: 'checkbox' });
+
+    container.append(el('div', { class: 'card form-card' },
+      el('h2', {}, 'Add a testimonial'),
+      field('Name', nameInput),
+      field('Context', contextInput),
+      field('Quote / outcome', quoteInput, 'Exact words if you have them. This is what generation will cite verbatim, so make sure it is accurate.'),
+      field('Date', dateInput),
+      el('label', { class: 'row gap', style: 'align-items:center' },
+        consentInput,
+        el('span', {}, 'They have given permission to use this publicly (required before it can appear in generated content or Review schema)')),
+      el('button', {
+        class: 'btn btn-primary', onclick: async () => {
+          if (!nameInput.value.trim() || !quoteInput.value.trim()) { toast('Name and quote/outcome are required', 'err'); return; }
+          const next = [...list, {
+            id: Math.random().toString(36).slice(2, 10),
+            name: nameInput.value.trim(),
+            context: contextInput.value.trim(),
+            quote: quoteInput.value.trim(),
+            date: dateInput.value || null,
+            consent: consentInput.checked,
+          }];
+          await persist(next);
+          draw();
+          toast('Testimonial added');
+        },
+      }, '+ Add testimonial'),
+    ));
+  };
+
+  draw();
   root.replaceChildren(container);
 }

@@ -1,20 +1,14 @@
-# T4: Client list warm-up note
+# T4: Newsletter for Beehiiv (client warm-up)
 
-**Send status:** not sent, per Nicci. Claude Code does not send. Suggested send: Thu Oct 1, morning.
+**Status:** drafted, not sent. Claude Code does not send. It also lives in the Tahiti workspace package as the Newsletter (Beehiiv) asset. Suggested send: Thu Oct 1, morning. No list-segment decision needed (Nicci: skip the list).
 
-**Subject:** I'm heading to French Polynesia this fall
+**Subject (34 chars):** Why I'm heading to French Polynesia
+**Subject B:** Tahiti and Moorea, 25 to 45 minutes apart
+**Preview text:** What I'm studying before I plan Tahiti for you, and who I plan it with.
+**CTA button:** Reply With Your Questions
+**P.S.:** Hit reply with the one thing you most want to know about Tahiti and Moorea.
+**Beehiiv web version:** turn it on. SEO title "Why I'm Heading to French Polynesia | Travel GHR"; meta description "Nicci Grotefendt of Travel GHR explains how Tahiti and Moorea combine in one trip and who she plans Tahiti with."
 
-Hi [First name],
+**Body:** see the Newsletter asset in the Tahiti workspace package (ContentStudio), or `T1_sources.md` rows 1 to 14 for every fact used. About 330 words, story-first, one idea, one CTA (reply), FAQ at the end so the web version is crawlable.
 
-This fall I am heading to French Polynesia to personally vet it. I completed the Tahiti Specialist Program, and I would rather see the islands with my own eyes before I plan them for anyone.
-
-If Tahiti or Moorea have ever crossed your mind, I would love to hear what draws you to them. Just reply to this email with a line or two, and I will keep you in the loop as I go.
-
-Warmly,
-Nicci
-Travel GHR | Privately Curated. Personally Yours.
-
----
-Words: about 95. One call to action (reply). No FAM details, no prices, no property names.
-Sources: weekly plan rules 4 and 6 (project file); nothing else claimed.
-Missing: your preferred sign-off and client-list segment (all clients, or past travelers only).
+Sources: T1_sources.md. Nothing new claimed. No prices, no FAM details, no property names.

@@ -31,6 +31,8 @@ const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.
 const { DEMO_STATE } = await import('./lib/demo.js');
 const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
+const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
+const { buildSiteSetupKit } = await import('./lib/sitekit.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
 
@@ -134,6 +136,19 @@ app.put('/api/state', (req, res) => {
 // Rule breaks sitting in the creator's own profile text (blocklisted words,
 // disparaging vocabulary, dashes). Pure string checks, no model tokens.
 app.get('/api/profile/lint', (req, res) => res.json({ warnings: lintProfile(stateStore.get().profile || {}) }));
+
+// Once-per-site setup prompt (freshness dates, IndexNow key file, Meta Pixel,
+// paid-social link template). The IndexNow key is minted on first use and
+// kept on the workspace profile so the key file the site serves never changes.
+app.get('/api/site-setup-kit', (req, res) => {
+  const state = stateStore.get();
+  const biz = (state.profile.business = state.profile.business || {});
+  if (!biz.indexNowKey) {
+    biz.indexNowKey = newIndexNowKey();
+    stateStore.set(state);
+  }
+  res.json({ markdown: buildSiteSetupKit(state.profile, biz.indexNowKey), indexNowKey: biz.indexNowKey });
+});
 
 // Token and prompt-cache ledger for this server process (resets on restart).
 app.get('/api/usage', (req, res) => res.json(usageReport()));
@@ -476,6 +491,7 @@ app.patch('/api/packages/:id', (req, res) => {
       if (p.id !== req.params.id) return p;
       if (!p.platforms?.[platformId]?.fields || typeof field !== 'string') return p;
       p.platforms[platformId].fields[field] = value;
+      p.contentModifiedAt = new Date().toISOString();
       if (field === 'chapters') syncChapterTitles(p, platformId, value);
       p.jsonld = buildJsonLd(p, profile);
       p.visibility = scorePackage(p, profile);
@@ -543,7 +559,19 @@ app.post('/api/packages/:id/published', async (req, res) => {
     }),
   }));
   pkg = packageStore.get().items.find((p) => p.id === req.params.id) || pkg;
-  res.json({ package: pkg, audit });
+  // A page that renders correctly for bots is worth announcing: submit it
+  // to IndexNow (Bing and other participants) once the site serves our key
+  // file. Skipped quietly until the Site setup kit has been used.
+  let indexNow = null;
+  const nowKey = profile.business?.indexNowKey;
+  if (u && audit?.passed && nowKey) {
+    indexNow = await submitIndexNow(u, nowKey);
+    packageStore.update((s) => ({
+      items: s.items.map((p) => (p.id === req.params.id ? { ...p, indexNow: { ...(p.indexNow || {}), [platformId]: indexNow } } : p)),
+    }));
+    pkg = packageStore.get().items.find((p) => p.id === req.params.id) || pkg;
+  }
+  res.json({ package: pkg, audit, indexNow });
 });
 
 // Re-run the crawler-view audit on an already registered URL (after a site
@@ -652,6 +680,7 @@ app.patch('/api/packages/:id/citations', (req, res) => {
       if (citeLines != null) p.citeLines = cleanList(citeLines, 6);
       if (definition != null) p.definition = String(definition).trim() || null;
       if (quotable != null) p.quotable = String(quotable).trim() || null;
+      p.contentModifiedAt = new Date().toISOString();
       p.jsonld = buildJsonLd(p, profile);
       p.visibility = scorePackage(p, profile);
       return (pkg = p);

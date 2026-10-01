@@ -330,9 +330,9 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
   const saveBtn = el('button', {
     class: 'btn btn-primary btn-xs', onclick: async () => {
       try {
-        const { package: updated, audit } = await api.setPublishedUrl(pkg.id, platformId, urlInput.value.trim());
+        const { package: updated, audit, indexNow } = await api.setPublishedUrl(pkg.id, platformId, urlInput.value.trim());
         Object.assign(pkg, updated);
-        toast(`Live URL registered · llms.txt and schema updated${audit?.summary ? ` · crawler view: ${audit.summary}` : ''}`);
+        toast(`Live URL registered · llms.txt and schema updated${audit?.summary ? ` · crawler view: ${audit.summary}` : ''}${indexNow ? ` · IndexNow: ${indexNow.status === 'submitted' ? 'submitted' : indexNow.reason || indexNow.status}` : ''}`);
         refresh();
       } catch (err) { toast(err.message, 'err'); }
     },

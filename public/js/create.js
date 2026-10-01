@@ -264,6 +264,16 @@ function renderPackage(pkg, onDelete) {
         el('a', { class: 'btn btn-primary btn-xs', href: `#/publish?pkg=${pkg.id}` }, '📤 Publish Run'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.md`, packageMarkdown(pkg), 'text/markdown') }, '⬇ Publish kit (.md)'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`website-kit-${pkg.id}.md`, websiteKit(pkg), 'text/markdown') }, '⬇ Website kit (Lovable)'),
+        el('button', {
+          class: 'btn btn-ghost btn-xs',
+          title: 'Once per site: freshness dates, IndexNow key file, Meta Pixel, paid-social link template',
+          onclick: async () => {
+            try {
+              const { markdown } = await api.siteSetupKit();
+              download('site-setup-kit.md', markdown, 'text/markdown');
+            } catch (err) { toast(err.message, 'err'); }
+          },
+        }, '⬇ Site setup kit (once per site)'),
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.json`, JSON.stringify(pkg, null, 2), 'application/json') }, '⬇ JSON'),
         el('button', { class: 'btn btn-danger btn-xs', onclick: onDelete }, 'Delete'))),
     pkg.quotable ? el('blockquote', { class: 'sample' }, `“${pkg.quotable}”`) : null,
@@ -307,9 +317,9 @@ function publishedUrlRow(pkg, platformId, onPackageUpdated) {
   const save = el('button', {
     class: 'btn btn-ghost btn-xs', onclick: async () => {
       try {
-        const { package: updated, audit } = await api.setPublishedUrl(pkg.id, platformId, input.value.trim());
+        const { package: updated, audit, indexNow } = await api.setPublishedUrl(pkg.id, platformId, input.value.trim());
         Object.assign(pkg, updated);
-        toast(input.value.trim() ? `Live URL registered · schema and llms.txt updated${audit?.summary ? ` · crawler view: ${audit.summary}` : ''}` : 'Live URL cleared');
+        toast(input.value.trim() ? `Live URL registered · schema and llms.txt updated${audit?.summary ? ` · crawler view: ${audit.summary}` : ''}${indexNow ? ` · IndexNow: ${indexNow.status === 'submitted' ? 'submitted' : indexNow.reason || indexNow.status}` : ''}` : 'Live URL cleared');
         onPackageUpdated?.();
       } catch (err) { toast(err.message, 'err'); }
     },
@@ -912,7 +922,8 @@ Page requirements:
 - Meta title: "${title}" (trim to 60 chars if longer)
 - Meta description: "${metaDesc}"
 - Render the article below preserving its heading hierarchy exactly (the # line is the page H1, ## lines are H2 sections, ### are H3). Readable column width, generous spacing.
-${fieldText(yt.title) ? `- Embed my YouTube video "${fieldText(yt.title)}" [FILL: paste YouTube URL after upload] above the article body.\n` : ''}- Keep the FAQ section as an accordion or clearly separated Q&A block.
+${fieldText(yt.title) ? `- Embed my YouTube video "${fieldText(yt.title)}" [FILL: paste YouTube URL after upload] above the article body.\n` : ''}- Show a visible "Updated [date]" line under the title, using the dateModified value inside the JSON-LD below.
+- Keep the FAQ section as an accordion or clearly separated Q&A block.
 - Insert the JSON-LD below into the page <head> exactly as provided — do not modify it.
 - End the page with one CTA button: [FILL: CTA label + URL].
 - Add the page to the sitemap and link it from the articles/blog index.

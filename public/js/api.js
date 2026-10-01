@@ -30,6 +30,7 @@ export const api = {
   saveState: (state) => withWarnings(send('PUT', '/api/state', state)),
   patchState: (path, value) => withWarnings(send('PATCH', '/api/state', { path, value })),
   loadDemo: () => send('POST', '/api/demo', {}),
+  siteSetupKit: () => get('/api/site-setup-kit'),
 
   interviewBrief: (answers) => send('POST', '/api/interview/brief', { answers }),
   voiceDna: (files) => send('POST', '/api/voice-dna', { files }),

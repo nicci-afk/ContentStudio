@@ -25,6 +25,15 @@ push only when the user is not rendering.
   narration cache (per voice+script hash), render job state persisted to disk
 - `lib/auth.js` — magic-link email sign-in (MAGIC_EMAILS allowlist) +
   password sessions + Basic auth for API tools
+- `lib/plan.js` — Content Plan (autopilot drafting): per-workspace
+  `profile.contentPlan` (enabled, approved facts, items with cadence and a
+  topic queue). Off by default and capped (3 per run, 6 per day). An hourly
+  scheduler drafts due items through `generatePackage` using per-workspace
+  handles (`workspaceHandle` in store.js), never the active-workspace
+  singleton. `preflight()` reuses the visibility rubric for blocklist, dash,
+  and industry-respect blockers plus a placeholder scan. Drafts are never
+  approved or posted; the Chrome handoff stays on Publish Run. Non-empty
+  facts add an APPROVED FACTS block to `masterContext`.
 - `public/js/` — one module per view; `el()` helper in `ui.js`
 
 ## Non-negotiable content rules

@@ -34,7 +34,7 @@ Add one new journal article to `src/data/insights.ts` and nothing else in the co
       'Tahiti is worth visiting on its own. It is the largest island in the Society Islands, about 1,042 square kilometers, and it is home to Papeete, the capital and administrative center. It offers a central market, local food trucks, waterfalls, black sand beaches and the Teahupo\'o surf break, so the island holds its own as a destination.',
     bodyMarkdown: `**Yes, Tahiti is worth visiting on its own, because it is the largest island in the Society Islands and holds the capital, the main market, waterfalls, black sand beaches and the Teahupo'o surf break.** Tahiti Tourisme counts about 1,042 square kilometers and roughly 192,000 residents on the island, which is why a stay here feels like a destination and not a doorway.
 
-I am Nicci Grotefendt, founder of Travel GHR in Edwardsville, Illinois, a CLIA Certified Cruise Counselor, and a graduate of the Tahiti Specialist Program. This fall I am heading to French Polynesia to personally vet it, and this is one of the first questions I want to answer well.
+I am Nicci Grotefendt, founder of Travel GHR in Edwardsville, Illinois, and a graduate of the Tahiti Specialist Program. This fall I am heading to French Polynesia to personally vet it, and this is one of the first questions I want to answer well.
 
 ## Is Tahiti worth visiting on its own?
 

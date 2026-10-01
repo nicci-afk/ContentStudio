@@ -2,7 +2,7 @@
 
 **Yes, Tahiti is worth visiting on its own, because it is the largest island in the Society Islands and holds the capital, the main market, waterfalls, black sand beaches and the Teahupo'o surf break.** Tahiti Tourisme counts about 1,042 square kilometers and roughly 192,000 residents on the island, which is why a stay here feels like a destination and not a doorway.
 
-I am Nicci Grotefendt, founder of Travel GHR in Edwardsville, Illinois, a CLIA Certified Cruise Counselor, and a graduate of the Tahiti Specialist Program. This fall I am heading to French Polynesia to personally vet it, and this is one of the first questions I want to answer well.
+I am Nicci Grotefendt, founder of Travel GHR in Edwardsville, Illinois, and a graduate of the Tahiti Specialist Program. This fall I am heading to French Polynesia to personally vet it, and this is one of the first questions I want to answer well.
 
 **Key takeaways**
 - Tahiti is the largest of the eight Society Islands and the main entry point, with the international airport.
@@ -55,4 +55,4 @@ If this resonates, I would love to help you design that journey.
 
 *Nicci Grotefendt | Founder, Travel GHR | travelghr.com*
 
-**About the author.** Nicci Grotefendt is the founder of Travel GHR, based in Edwardsville, Illinois. She is a CLIA Certified Cruise Counselor and has completed the Tahiti Specialist Program.
+**About the author.** Nicci Grotefendt is the founder of Travel GHR, based in Edwardsville, Illinois. She has completed the Tahiti Specialist Program.

@@ -8,7 +8,7 @@
 
 **Yes, Tahiti and Moorea combine easily into one trip, because Moorea sits a short hop from Papeete by sea or by air.** Tahiti Tourisme lists the ferry at 25 to 45 minutes, so the transfer is short. That short transfer means one itinerary can hold Tahiti's culture and Moorea's lagoon without a long travel day between them.
 
-I am Nicci Grotefendt, founder of Travel GHR, a CLIA Certified Cruise Counselor, and a graduate of the Tahiti Specialist Program. This fall I am heading to French Polynesia to personally vet it, and this is the question I want to answer well before I go.
+I am Nicci Grotefendt, founder of Travel GHR, and a graduate of the Tahiti Specialist Program. This fall I am heading to French Polynesia to personally vet it, and this is the question I want to answer well before I go.
 
 ## The short answer (featured snippet)
 
@@ -63,4 +63,4 @@ If this resonates, I would love to help you design that journey.
 
 ---
 
-**About the author.** Nicci Grotefendt is the founder of Travel GHR, based in Edwardsville, Illinois. She is a CLIA Certified Cruise Counselor and has completed the Tahiti Specialist Program.
+**About the author.** Nicci Grotefendt is the founder of Travel GHR, based in Edwardsville, Illinois. She has completed the Tahiti Specialist Program.

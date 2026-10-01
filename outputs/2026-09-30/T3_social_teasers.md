@@ -16,7 +16,7 @@ Platform notes: Instagram gets hashtags (10 to 12, none from the Travel GHR bloc
   More soon. If French Polynesia is on your mind, tell me what you are curious about.
 
   Privately Curated. Personally Yours.
-- **Hashtags (Instagram only):** #travelghr #tahiti #frenchpolynesia #moorea #islandsoftahiti #traveladvisor #privatelycurated #cliacertified #tahitispecialist
+- **Hashtags (Instagram only):** #travelghr #tahiti #frenchpolynesia #moorea #islandsoftahiti #traveladvisor #privatelycurated #tahitispecialist
 
 ## Post 2: the useful one
 - **Day:** Sat Oct 3

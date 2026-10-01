@@ -1281,3 +1281,15 @@ This is a different session from the "Session 10: Muse research" block above; bo
 - `README.md` — setup, full API reference, deploy, auth
 - `docs/AI-VISIBILITY-PLAYBOOK.md` — the methodology (E-E-A-T-V, platform
   weighting, capture doctrine, retention loop)
+
+## Session 10c (2026-10-01): Virgin Voyages site finished and published
+
+Published to virginvoyagesexpert.com (Lovable project b6dc54a0-60b2-4e36-8ac4-d81c3b09a978, last commit c0c86eeb) and verified by crawling all 283 sitemap pages as GPTBot: zero em or en dashes, zero spaced semicolons, every sailing page carries the commission and independence line exactly once, sitemap kept every URL and lastmod.
+- Dash cleanup (normalizeDashes) published first, then crawled clean.
+- Advisor notes ("Sailed by Nicci") exist ONLY on routes she has personally sailed: the eclipse report /sailings/eclipse-med-2026 (Scarlet Lady, Aug 2026, disembark Aug 22; folio said Aug 21, she confirmed Aug 22) and the three 4-night Miami round trips with Key West and Bimini only (Valiant Lady, Sept 2025, night count deliberately not stated because she is unsure if it was 3 or 4). Never extend a note to a route she did not sail; the first build wrongly added it to 6 and 7 night sailings with other ports and it was caught in review and removed. Assignment is by explicit slug in src/lib/sailings.ts.
+- Her notes (her words): Barcelona best for multi-generational groups, book alongside an extension in Rome and Amsterdam, tip be flexible and embrace the European vibe. Miami best for anyone who loves excitement and great views, book alongside Miami experiences or a Florida Keys extension, Scarlet Night stood out, tip book the Splash of Romance package to board early.
+- Commission disclosure: she earns commission when clients book through her website link; the disclosure line sits on sailing pages, Shore Things, and six port guides.
+- Journal contrast wording (industry respect, law 17) rewritten in 34 places across Ibiza, Cannes, Ajaccio, Embarkation and the journal listing, JSON-LD kept in sync. Live crawl found none of the old phrases.
+- Data note: sailings.json has 173 itineraries (not 136); 13 route families share stops and nights under different titles, no merge was done.
+- Lovable lesson: plan_mode first, then relay approval; always review the agent's slug assignments against her real experience.
+- Still open: shore-things third-party prices and ratings freshness (a "prices can change" line was added, data untouched); travelghr.com /guide/the-conscious-creator contrast passages; "How did you hear about us?" question in the Conscious Creator Google Form (hers to add); R2 backup env vars.

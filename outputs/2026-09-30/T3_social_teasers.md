@@ -46,8 +46,8 @@ Platform notes: Instagram gets hashtags (10 to 12, none from the Travel GHR bloc
   If you are thinking about French Polynesia, message me. I would love to hear what you are picturing.
 - **Hashtags (Instagram only):** #travelghr #tahiti #frenchpolynesia #traveladvisor #privatelycurated #tahitispecialist #destinationexpert #islandsoftahiti
 
-## Image selections (chosen for AI visibility, none licensed yet)
-Selected from Adobe Stock search on 2026-09-30 (all returned as free-tier). Selection logic: each image must be place-specific, show no property or branded venue, and match a fact in the copy. Nothing is licensed or attached until you confirm.
+## Image selections (chosen for AI visibility; licensed 2026-10-01 via Adobe Stock)
+Selected from Adobe Stock search on 2026-09-30 (all returned as free-tier). Selection logic: each image must be place-specific, show no property or branded venue, and match a fact in the copy. All three were licensed on 2026-10-01 at Nicci's request. The licensing tool reported "just_purchased" although each asset was tagged free tier, so check Adobe account usage for any charge.
 
 | Use | Adobe Stock ID | Title | Alt text (keyword-rich, factual) |
 |---|---|---|---|

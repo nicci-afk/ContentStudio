@@ -28,6 +28,7 @@ const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna,
 const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
 const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.js');
+const { getPlan, normalizePlan, planQueue, runPlan, planRunning, schedulePlan, FACT_LABELS, MAX_PER_RUN, DAILY_DRAFT_CAP } = await import('./lib/plan.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
 const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
@@ -129,6 +130,11 @@ app.delete('/api/workspaces/:id', (req, res) => {
 app.get('/api/state', (req, res) => res.json(stateStore.get()));
 
 app.put('/api/state', (req, res) => {
+  // The Content Plan is server-owned (the scheduler records topic status and
+  // run times in it), so a whole-state save from any other view keeps the
+  // stored plan instead of overwriting it with that tab's older copy.
+  const storedPlan = stateStore.get()?.profile?.contentPlan;
+  if (storedPlan && req.body?.profile) req.body.profile.contentPlan = storedPlan;
   stateStore.set(req.body);
   res.json({ ok: true, warnings: lintProfile(stateStore.get().profile || {}) });
 });
@@ -396,6 +402,53 @@ app.post('/api/pillars/suggest', wrap(async (req, res) => {
   const result = await suggestPillars(stateStore.get().profile);
   res.json(result);
 }));
+
+// ---- content plan (autopilot drafting; drafts only, never approves) -------
+
+const planJobs = new Map();
+const activeWsId = () => listWorkspaces().activeId;
+
+app.get('/api/plan', (req, res) => {
+  const plan = getPlan(stateStore.get().profile);
+  res.json({
+    plan, factLabels: FACT_LABELS, maxPerRun: MAX_PER_RUN, dailyCap: DAILY_DRAFT_CAP,
+    running: planRunning(activeWsId()),
+  });
+});
+
+app.put('/api/plan', (req, res) => {
+  const plan = normalizePlan(req.body || {}, stateStore.get().profile?.contentPlan || {});
+  const state = stateStore.get();
+  state.profile = { ...(state.profile || {}), contentPlan: plan };
+  stateStore.set(state);
+  res.json({ plan });
+});
+
+// Job-based like /api/generate: a run can take minutes. Switched-off plans
+// answer immediately with a reason and start nothing.
+app.post('/api/plan/run', (req, res) => {
+  const wsId = activeWsId();
+  const itemId = req.body?.itemId ? String(req.body.itemId) : undefined;
+  if (!stateStore.get().profile?.contentPlan?.enabled) {
+    return res.json({ ran: false, reason: 'Content Plan is switched off for this business.' });
+  }
+  if (planRunning(wsId)) return res.json({ ran: false, reason: 'A run is already in progress for this business.' });
+  const jobId = uid();
+  const job = { id: jobId, status: 'running', result: null, error: null };
+  planJobs.set(jobId, job);
+  runPlan(wsId, { itemId })
+    .then((result) => { job.result = result; job.status = 'done'; })
+    .catch((err) => { job.status = 'error'; job.error = err.message; });
+  res.json({ ran: true, jobId });
+});
+
+app.get('/api/plan/run/:jobId', (req, res) => {
+  const job = planJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'unknown job' });
+  res.json(job);
+});
+
+app.get('/api/plan/queue', (req, res) => res.json(planQueue(activeWsId())));
 
 // ---- generation (job-based so the UI can show live progress) -------------
 
@@ -1037,6 +1090,7 @@ if (swept.freedBytes > 0) {
   console.log(`  storage: swept ${Math.round(swept.freedBytes / 1e6)}MB of stale render temp files (${swept.removedTmp} folder(s), ${swept.removedParts} partial upload(s), ${swept.removedCacheFiles || 0} aged cache file(s))`);
 }
 scheduleBackups();
+schedulePlan();
 
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {

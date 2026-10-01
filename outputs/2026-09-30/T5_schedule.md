@@ -20,3 +20,8 @@ Nicci is unreachable from Oct 10 (outbound flight). Everything below is schedule
 - LinkedIn article: PUBLISHED Oct 1 (standalone, verified). URL registered in the Tahiti FAM package.
 - Google Business Profile post: BLOCKED until one Travel GHR listing is verified (four listings, none verified, one suspended). Keep 1012 North Main Street. Link already filled in the package.
 - Website post: next. Paste `T2_website_lovable_prompt.md` into Lovable with `AdobeStock_222935439.jpg` attached.
+
+## Hold, Oct 1 (credential check)
+- Website post: SENT to Lovable but the agent paused with a question and has not added the article. Nothing is live on travelghr.com.
+- Reason: Lovable's `roadmap.md` says "CCC certification evidence before any CLIA claim is added back". Our drafts, the published LinkedIn article, the newsletter and the Google Q&A all say "CLIA Certified Cruise Counselor".
+- Nicci said she will confirm today. If yes: reply "confirmed" to the Lovable agent and finish. If no: strip the phrase from every draft, the package fields, the Lovable prompt, and edit the live LinkedIn article.

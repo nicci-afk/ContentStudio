@@ -918,6 +918,8 @@ export function websiteKit(pkg, profile) {
 
 Add a new article page to my site at /${slug}
 
+Tracking: do NOT add a Meta Pixel or any tracking code to this page. If the site has one, it is installed once site wide (see the separate Site setup kit) and already covers this page.
+
 Page requirements:
 - Meta title: "${title}" (trim to 60 chars if longer)
 - Meta description: "${metaDesc}"

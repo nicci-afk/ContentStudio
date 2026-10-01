@@ -16,8 +16,8 @@ if (fs.existsSync(envFile)) {
 }
 
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
-  listWorkspaces, createWorkspace, activateWorkspace, renameWorkspace, deleteWorkspace,
-  listSnapshots, restoreSnapshot, readWorkspace } =
+  listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace,
+  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -44,6 +44,21 @@ const app = express();
 app.use(express.json({ limit: '80mb' }));
 registerAuthRoutes(app, path.join(__dirname, 'public'));
 app.use(authMiddleware);
+
+// Per-browser workspace: the cs_ws cookie (set when a workspace is picked)
+// or an X-Workspace header (API tools) decides which business this request
+// reads and writes, so two people can work in different brands at once.
+const WS_COOKIE = 'cs_ws';
+const setWsCookie = (res, id) =>
+  res.setHeader('Set-Cookie',
+    `${WS_COOKIE}=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${process.env.NODE_ENV === 'development' ? '' : '; Secure'}`);
+app.use((req, res, next) => {
+  const fromCookie = (req.headers.cookie || '').split(';').map((c) => c.trim())
+    .find((c) => c.startsWith(`${WS_COOKIE}=`))?.slice(WS_COOKIE.length + 1);
+  const id = String(req.headers['x-workspace'] || fromCookie || '');
+  if (id && workspaceExists(id)) return runWithWorkspace(id, next);
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const wrap = (fn) => (req, res) => {
@@ -103,17 +118,24 @@ app.get('/llms.txt', (req, res) => {
 app.get('/api/workspaces', (req, res) => res.json(listWorkspaces()));
 
 app.post('/api/workspaces', (req, res) => {
-  createWorkspace(req.body?.name);
-  res.json(listWorkspaces());
+  const id = createWorkspace(req.body?.name, req.body?.library);
+  setWsCookie(res, id);
+  runWithWorkspace(id, () => res.json(listWorkspaces()));
 });
 
+// Picking a workspace only points THIS browser at it; nobody else's view
+// (and no server-wide pointer) changes.
 app.post('/api/workspaces/:id/activate', (req, res) => {
-  if (!activateWorkspace(req.params.id)) return res.status(404).json({ error: 'unknown workspace' });
-  res.json(listWorkspaces());
+  if (!workspaceExists(req.params.id)) return res.status(404).json({ error: 'unknown workspace' });
+  setWsCookie(res, req.params.id);
+  runWithWorkspace(req.params.id, () => res.json(listWorkspaces()));
 });
 
 app.patch('/api/workspaces/:id', (req, res) => {
-  if (!renameWorkspace(req.params.id, req.body?.name)) return res.status(400).json({ error: 'name required' });
+  const { name, library } = req.body || {};
+  if (library && !setWorkspaceLibrary(req.params.id, library)) return res.status(400).json({ error: 'bad library or workspace' });
+  if (name && !renameWorkspace(req.params.id, name)) return res.status(400).json({ error: 'name required' });
+  if (!name && !library) return res.status(400).json({ error: 'name or library required' });
   res.json(listWorkspaces());
 });
 

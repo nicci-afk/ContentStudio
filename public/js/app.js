@@ -42,7 +42,10 @@ function workspaceSwitcher() {
       if (e.target.value === '__new__') {
         const name = prompt('Name the new business workspace (e.g. "Travel GHR" or "RE/MAX Alliance"):');
         if (!name) { e.target.value = ws.activeId; return; }
-        appState.workspaces = await api.createWorkspace(name);
+        const known = (ws.libraries || []).map((l) => `${l.name} (${l.items})`).join(', ');
+        const lib = prompt(
+          `Photo library for "${name}".\nType an existing library name to share its photos (${known || 'none yet'}), or leave blank for a new separate library:`) || '';
+        appState.workspaces = await api.createWorkspace(name, lib.trim().split(' ')[0]);
       } else {
         appState.workspaces = await api.activateWorkspace(e.target.value);
       }
@@ -57,7 +60,7 @@ function workspaceSwitcher() {
       return o;
     }),
     el('option', { value: '__new__' }, '＋ New business…'));
-  return el('div', { class: 'ws-switcher', title: 'Each business gets its own profile, voice, library, and packages' }, select);
+  return el('div', { class: 'ws-switcher', title: 'Each business gets its own profile, voice, and packages. Photo libraries can be shared between businesses or kept separate.' }, select);
 }
 
 function renderNav() {

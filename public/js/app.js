@@ -39,6 +39,15 @@ function workspaceSwitcher() {
   const select = el('select', {
     class: 'input select ws-select',
     onchange: async (e) => {
+      if (e.target.value === '__rename__') {
+        const cur = ws.items.find((w) => w.id === ws.activeId);
+        const name = prompt('Rename this business in the dropdown (your profile name is not changed):', cur?.name || '');
+        e.target.value = ws.activeId;
+        if (!name?.trim()) return;
+        appState.workspaces = await api.renameWorkspace(ws.activeId, name);
+        route();
+        return;
+      }
       if (e.target.value === '__new__') {
         const name = prompt('Name the new business workspace (e.g. "Travel GHR" or "RE/MAX Alliance"):');
         if (!name) { e.target.value = ws.activeId; return; }
@@ -59,6 +68,7 @@ function workspaceSwitcher() {
       if (w.id === ws.activeId) o.selected = true;
       return o;
     }),
+    el('option', { value: '__rename__' }, '✎ Rename this business…'),
     el('option', { value: '__new__' }, '＋ New business…'));
   return el('div', { class: 'ws-switcher', title: 'Each business gets its own profile, voice, and packages. Photo libraries can be shared between businesses or kept separate.' }, select);
 }

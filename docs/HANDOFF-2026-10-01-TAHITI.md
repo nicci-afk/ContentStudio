@@ -6,11 +6,11 @@
 - LIVE: LinkedIn article (standalone, CLIA claim since removed by Nicci), Facebook teaser 1 (crossposted to Instagram), website article on travelghr.com (Lovable commit 40b512b, deployed, verified from server HTML). All live URLs are registered in the Tahiti FAM workspace.
 - NOT done: newsletter (held by Nicci), Google Business Profile post (blocked on listing verification), week-of-Oct-5 article (drafted and approved in Content Studio, Lovable prompt ready in `outputs/2026-10-05/`), teasers 2 and 3.
 
-Not secrets, not itinerary. The studio password is never stored in the repo; ask the creator. The itinerary and costs live only in her own files.
+The studio password is never stored in the repo. The itinerary and costs live only in her own files.
 
 ## Where things are
 - Production workspace "Tahiti FAM" id `3aedae398d985776` (the switcher shows it as "Travel GHR": the studio renames the active workspace to `profile.business.name` on every state save in `lib/store.js syncName`, so it matches the original Travel GHR workspace `bb9470f36532761b`).
-- Packages in it: `19fa3c3ad1b4f760` "How to combine Tahiti and Moorea in one trip" (linkedin, gbp, newsletter, score about 85); `eb29c063e012e55e` "Is Tahiti worth visiting on its own?" (linkedin, gbp, about 82, target Wed Oct 7); teasers `0765f6dc8136a0b4`, `b30d64662c336a5d`, `62cc9183b83f7a87` (facebook + instagram caption). Nothing is approved; the creator approves.
+- Packages in it: `19fa3c3ad1b4f760` "How to combine Tahiti and Moorea in one trip" (linkedin, gbp, newsletter, score about 85); `eb29c063e012e55e` "Is Tahiti worth visiting on its own?" (linkedin, gbp, about 82, target Wed Oct 7); teasers `0765f6dc8136a0b4`, `b30d64662c336a5d`, `62cc9183b83f7a87` (facebook + instagram caption). The creator approved the LinkedIn and Google tabs of both article packages on Oct 1 (approval is hers alone; never approve for her). The teaser packages are not marked approved in the studio even though teaser 1 is live on Facebook and Instagram.
 - Drafts, sources and Lovable prompts: branch `claude/tahiti-weekly-plan-drafts`, `outputs/2026-09-30/` and `outputs/2026-10-05/`.
 - Content Plan (autopilot drafting) built and pushed on `claude/content-autopilot`, not merged, not deployed. Review notes are in that branch's final commit messages and in the session summary: advisory preflight (approve not gated), UTC schedule, server-owned plan on PUT /api/state, no media in drafts.
 

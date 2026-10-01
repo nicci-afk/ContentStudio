@@ -1,5 +1,11 @@
 # Handoff: Tahiti FAM marketing session (2026-09-30 to 2026-10-01)
 
+**Start here (new session):** read this file, then `docs/` and `outputs/` on branch `claude/tahiti-weekly-plan-drafts`. Ask the creator for the studio password (Basic auth on /api). Nothing in this file is a secret.
+
+## State at close (Oct 1)
+- LIVE: LinkedIn article (standalone, CLIA claim since removed by Nicci), Facebook teaser 1 (crossposted to Instagram), website article on travelghr.com (Lovable commit 40b512b, deployed, verified from server HTML). All live URLs are registered in the Tahiti FAM workspace.
+- NOT done: newsletter (held by Nicci), Google Business Profile post (blocked on listing verification), week-of-Oct-5 article (drafted and approved in Content Studio, Lovable prompt ready in `outputs/2026-10-05/`), teasers 2 and 3.
+
 Not secrets, not itinerary. The studio password is never stored in the repo; ask the creator. The itinerary and costs live only in her own files.
 
 ## Where things are
@@ -14,9 +20,9 @@ Not secrets, not itinerary. The studio password is never stored in the repo; ask
 - Tahiti facts come from Tahiti Tourisme pages; sources are in `T1_sources.md` and `T1b_sources.md`. The 15 minute flight figure was removed everywhere (unverified).
 
 ## Open items
-1. **CLIA Certified Cruise Counselor claim: LEFT OUT (decided Oct 1).** Not confirmed. Removed from every unpublished field in the Tahiti workspace, the Lovable prompts and the profile (credentials are the Tahiti Specialist Program only). The LinkedIn article published Oct 1 still states it until she edits it. Website article published through Lovable without the claim. Add it back only after she provides certification evidence (Lovable roadmap.md item).
+1. **CLIA Certified Cruise Counselor claim: LEFT OUT everywhere (resolved Oct 1).** Not confirmed. Removed from every package field, the profile, the Lovable prompts, the website, and the live LinkedIn article (Nicci edited it). Add it back only after she provides certification evidence (Lovable `roadmap.md` item).
 2. **Google Business Profile** has four unverified Travel GHR listings, one suspended. She is keeping 1012 North Main Street, Edwardsville. No GBP post until a listing is verified. Check which listing the profile's Maps link and reviews sit on before removing duplicates.
 3. **LinkedIn newsletter default.** The article editor pre-selects her "Expedition Intelligence" newsletter under Publish to. She must select "Individual article". The Chrome extension missed this once; fixed wording is in `public/js/publish.js` on `claude/content-autopilot` and in the run sheet.
 4. During-trip daily posts (Oct 13 to 23) are planned privately; she approves from her phone.
-5. Lovable commit `d2b7cdc` contains an unrelated platform edit to `src/integrations/supabase/previewAuthStorage.ts`; it ships with the next publish.
+5. Lovable commit `d2b7cdc` had an unrelated edit to `src/integrations/supabase/previewAuthStorage.ts`; reverted in `40b512b`. That commit also mirrored the article into `supabase/functions/mcp/index.ts` (consistent with existing articles).
 6. Backups are off (`R2_*` env vars not set); production data exists only on the Render disk and snapshots.

@@ -15,3 +15,8 @@ Nicci is unreachable from Oct 10 (outbound flight). Everything below is schedule
 
 **Before Oct 10:** all eight rows, then one more pre-trip week (Oct 7 to 9) is available for a second article if you want it.
 **Scheduling mechanics:** LinkedIn, Facebook, Instagram and GBP all offer native scheduling; email through your usual sender. Content Studio's Publish Run page can hold each card once the Tahiti workspace exists.
+
+## Update Oct 1
+- LinkedIn article: PUBLISHED Oct 1 (standalone, verified). URL registered in the Tahiti FAM package.
+- Google Business Profile post: BLOCKED until one Travel GHR listing is verified (four listings, none verified, one suspended). Keep 1012 North Main Street. Link already filled in the package.
+- Website post: next. Paste `T2_website_lovable_prompt.md` into Lovable with `AdobeStock_222935439.jpg` attached.

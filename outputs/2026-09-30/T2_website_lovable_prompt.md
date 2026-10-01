@@ -1,6 +1,6 @@
 # Lovable prompt: add the Tahiti and Moorea journal article to travelghr.com
 
-Paste this into the Lovable editor for the Travel GHR Website project (f3ebf3fa-86a9-40d8-a2c7-074c248c21bb). Do not send it through the API, which dropped the last request silently. Attach the licensed image `AdobeStock_222935439.jpg` in the same message. Publish on Fri Oct 2, after the LinkedIn article is live.
+Paste this into the Lovable editor for the Travel GHR Website project (f3ebf3fa-86a9-40d8-a2c7-074c248c21bb). Do not send it through the API, which dropped the last request silently. Attach the licensed image `AdobeStock_222935439.jpg` in the same message. The LinkedIn article went live Oct 1 at https://www.linkedin.com/pulse/how-combine-tahiti-moorea-one-trip-nicci-grotefendt-rga1c, so publish the website version now.
 
 ---
 
@@ -25,8 +25,8 @@ Add one new journal article to `src/data/insights.ts` and nothing else in the co
     secondaryKeywords: ['Tahiti and Moorea itinerary', 'Moorea ferry from Tahiti', 'French Polynesia travel advisor', 'Tahiti Specialist Program', 'privately curated Tahiti travel'],
     contentPillar: 'Destination',
     targetQueryCategory: 'Destination',
-    publishedISO: '2026-10-02',
-    modifiedISO: '2026-10-02',
+    publishedISO: '2026-10-01',
+    modifiedISO: '2026-10-01',
     readingMinutes: 5,
     heroImage: '/insights-images/journal/tahiti-moorea-aerial-hero.jpg',
     heroImageAlt: 'Aerial view of Moorea and Tahiti islands and their lagoon in French Polynesia, about 25 to 45 minutes apart by ferry',

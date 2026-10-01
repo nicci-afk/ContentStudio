@@ -25,3 +25,8 @@ Nicci is unreachable from Oct 10 (outbound flight). Everything below is schedule
 - Website post: SENT to Lovable but the agent paused with a question and has not added the article. Nothing is live on travelghr.com.
 - Reason: Lovable's `roadmap.md` says "CCC certification evidence before any CLIA claim is added back". Our drafts, the published LinkedIn article, the newsletter and the Google Q&A all say "CLIA Certified Cruise Counselor".
 - Nicci said she will confirm today. If yes: reply "confirmed" to the Lovable agent and finish. If no: strip the phrase from every draft, the package fields, the Lovable prompt, and edit the live LinkedIn article.
+
+## Closed out, Oct 1
+- LinkedIn article: LIVE (standalone). Facebook teaser 1: LIVE, crossposted to Instagram. Website article: LIVE at https://travelghr.com/journal/how-to-combine-tahiti-and-moorea-in-one-trip (Lovable commit 40b512b, deployed, verified from the server HTML: canonical, meta, Article, FAQPage and BreadcrumbList JSON-LD, sitemap, llms.txt).
+- CLIA CCC claim: left out of everything unpublished and the website. Still present in the LinkedIn article until edited.
+- Newsletter: held by Nicci. Google Business Profile: blocked on listing verification.

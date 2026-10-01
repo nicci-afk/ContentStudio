@@ -8,6 +8,13 @@ const j = (res) => {
 };
 
 const get = (url) => fetch(url).then(j);
+// Profile saves return lint warnings (blocklisted words, disparaging
+// vocabulary, dashes sitting in the creator's own profile text). api.js
+// cannot import ui.js without a cycle, so they travel as a DOM event.
+const withWarnings = (promise) => promise.then((r) => {
+  if (r?.warnings?.length) window.dispatchEvent(new CustomEvent('cs:profile-warnings', { detail: r.warnings }));
+  return r;
+});
 const send = (method, url, body) =>
   fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(j);
 
@@ -20,8 +27,8 @@ export const api = {
   renameWorkspace: (id, name) => send('PATCH', `/api/workspaces/${id}`, { name }),
   deleteWorkspace: (id) => send('DELETE', `/api/workspaces/${id}`),
   state: () => get('/api/state'),
-  saveState: (state) => send('PUT', '/api/state', state),
-  patchState: (path, value) => send('PATCH', '/api/state', { path, value }),
+  saveState: (state) => withWarnings(send('PUT', '/api/state', state)),
+  patchState: (path, value) => withWarnings(send('PATCH', '/api/state', { path, value })),
   loadDemo: () => send('POST', '/api/demo', {}),
 
   interviewBrief: (answers) => send('POST', '/api/interview/brief', { answers }),

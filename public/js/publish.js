@@ -7,7 +7,7 @@
 // and always stop short of posting, so the creator keeps the final click.
 
 import { api, appState } from './api.js';
-import { el, toast, spinner, copyBtn, copyRich, emptyState, textInput, textArea } from './ui.js';
+import { el, toast, spinner, copyBtn, copyRich, emptyState, textInput, textArea, crawlerAuditView } from './ui.js';
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
 
@@ -330,9 +330,9 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
   const saveBtn = el('button', {
     class: 'btn btn-primary btn-xs', onclick: async () => {
       try {
-        const { package: updated } = await api.setPublishedUrl(pkg.id, platformId, urlInput.value.trim());
+        const { package: updated, audit } = await api.setPublishedUrl(pkg.id, platformId, urlInput.value.trim());
         Object.assign(pkg, updated);
-        toast('Live URL registered · llms.txt and schema updated');
+        toast(`Live URL registered · llms.txt and schema updated${audit?.summary ? ` · crawler view: ${audit.summary}` : ''}`);
         refresh();
       } catch (err) { toast(err.message, 'err'); }
     },
@@ -362,7 +362,8 @@ function platformCard(pkg, platformId, spec, renders, refresh) {
     ...fields,
     el('div', { class: 'asset-field' },
       el('span', { class: 'field-label' }, posted ? 'Update the live URL' : 'After posting'),
-      el('div', { class: 'row gap', style: 'margin-top:6px' }, urlInput, saveBtn)),
+      el('div', { class: 'row gap', style: 'margin-top:6px' }, urlInput, saveBtn),
+      crawlerAuditView(pkg.crawlerAudit?.[platformId])),
     reshareBlock(pkg, platformId, refresh));
 }
 

@@ -1246,6 +1246,15 @@ guidance as well as AI citation.**
 All of the above already confirmed live in production (build `299b4b5`
 matches `/api/health` as of this session).
 
+## Session 10 (2026-10-01): Muse research, Phase 0 token savings, two free checks
+
+**Built on dev branch claude/epic-mccarthy-kmb0v2, tested locally against a mock Anthropic API plus a live audit of travelghr.com, NOT deployed.**
+- Muse Spark (Meta Model API, api.meta.ai, Anthropic- and OpenAI-compatible, US-only preview, data-use terms "not stated" by Meta) was researched. Decision: do NOT move content generation to it; A/B it later for native video analysis only; never the Contributor tier (trains on prompts); send no voice DNA or client data until Meta states standard-tier terms.
+- Token savings (no new vendor): claude() gained cacheSystem (system prompt cache breakpoint, used only where one package's platform calls reuse the identical prompt, never for single-use calls since a cache write costs more than a plain read); selectMedia now sends a 60-entry shortlist (shortlistForSelection: top topical matches plus best videos and stills by quality) instead of up to 200; analyzeMedia uses tier 'light' (takes effect only when ANTHROPIC_MODEL_LIGHT is set; A/B a few images before enabling in production). GET /api/usage reports tokens and cache-read share per bucket (generate, media-select, media-analyze, light, main) since process start.
+- Profile linter (lib/lint.js): profile saves return warnings for blocklisted words, disparaging vocabulary, and em/en dashes sitting in the profile's own text (the "budget pressure" leak class). GET /api/profile/lint. UI shows a toast.
+- Crawler-view audit (lib/crawl.js): registering a published URL fetches it as a plain non-JavaScript bot and stores pkg.crawlerAudit[platformId] (reachable, indexable, text in raw HTML, title, description, canonical, OG, valid JSON-LD). SSRF-guarded (private addresses and non-default ports refused); login-walled platforms are skipped. POST /api/packages/:id/audit re-runs it. Verified live: the travelghr.com article passes 9 of 9.
+- Planned next, in order: IndexNow plus dateModified freshness; Visibility Ledger (fixed buyer-question set per workspace, monthly mention/citation check, Bing Webmaster AI Performance as a free baseline); per-brand Meta Pixel (pixel id on the workspace profile, Website Kit install prompt with SPA PageView per route, Conversions API with event_id dedup, consent first); paid_social UTM variant kept separate from organic; Ads Kit; extractable-sentence rubric check; Mentions Engine (earned-media pitch kits); one @id per brand for entity separation. Pixel IDs are pending from the user.
+
 ## Docs
 
 - `README.md` — setup, full API reference, deploy, auth

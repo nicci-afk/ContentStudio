@@ -113,3 +113,19 @@ export function readFileAsDataURL(file) {
     r.readAsDataURL(file);
   });
 }
+
+// What a plain, non-JavaScript bot sees at a registered URL (see
+// lib/crawl.js). Shown beside the published-URL box so a page that looks
+// fine in a browser but serves crawlers an empty shell is caught at once.
+export function crawlerAuditView(audit) {
+  if (!audit) return null;
+  if (audit.skipped) return el('p', { class: 'muted', style: 'margin:6px 0 0' }, audit.skipped);
+  if (audit.error) return el('p', { class: 'muted', style: 'margin:6px 0 0' }, `Crawler-view audit could not run: ${audit.error}`);
+  return el('details', { class: 'asset-field', style: 'margin-top:6px', open: audit.passed ? null : true },
+    el('summary', { class: 'field-label', style: 'cursor:pointer' },
+      `${audit.passed ? '✅' : '⚠️'} Crawler view: ${audit.summary}`),
+    el('ul', { style: 'margin:8px 0 0;padding-left:18px' },
+      (audit.checks || []).map((c) => el('li', {}, `${c.pass ? '✓' : '✗'} ${c.label}: `, el('span', { class: 'muted' }, c.detail)))),
+    el('p', { class: 'muted', style: 'margin:8px 0 0' },
+      'This is what AI crawlers fetch: plain HTML, no JavaScript. Fix anything marked ✗ on the site, then re-save the URL to re-check.'));
+}

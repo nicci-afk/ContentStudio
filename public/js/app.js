@@ -1,5 +1,10 @@
 import { api, appState } from './api.js';
 import { el, toast, spinner } from './ui.js';
+
+window.addEventListener('cs:profile-warnings', (e) => {
+  const list = e.detail || [];
+  toast(`Profile check: ${list[0].message}${list.length > 1 ? ` (+${list.length - 1} more)` : ''}`, 'err');
+});
 import { renderInterview, renderVoice, renderTestimonials } from './interview.js';
 import { renderLibrary } from './media.js';
 import { renderStrategy } from './strategy.js';

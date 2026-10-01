@@ -21,7 +21,7 @@ const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile,
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
-const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError } =
+const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError, usageReport } =
   await import('./lib/providers.js');
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
@@ -29,6 +29,8 @@ const { startRender, renderJob, renderFile, listRenders, activeRenderIds, render
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
 const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
+const { lintProfile } = await import('./lib/lint.js');
+const { auditUrl } = await import('./lib/crawl.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
 
@@ -126,8 +128,15 @@ app.get('/api/state', (req, res) => res.json(stateStore.get()));
 
 app.put('/api/state', (req, res) => {
   stateStore.set(req.body);
-  res.json({ ok: true });
+  res.json({ ok: true, warnings: lintProfile(stateStore.get().profile || {}) });
 });
+
+// Rule breaks sitting in the creator's own profile text (blocklisted words,
+// disparaging vocabulary, dashes). Pure string checks, no model tokens.
+app.get('/api/profile/lint', (req, res) => res.json({ warnings: lintProfile(stateStore.get().profile || {}) }));
+
+// Token and prompt-cache ledger for this server process (resets on restart).
+app.get('/api/usage', (req, res) => res.json(usageReport()));
 
 app.patch('/api/state', (req, res) => {
   const { path: keyPath, value } = req.body;
@@ -137,7 +146,8 @@ app.patch('/api/state', (req, res) => {
   for (const k of keys.slice(0, -1)) node = node[k] = node[k] || {};
   node[keys.at(-1)] = value;
   stateStore.set(state);
-  res.json({ ok: true });
+  // Only profile edits can introduce a profile rule break.
+  res.json({ ok: true, ...(keys[0] === 'profile' ? { warnings: lintProfile(state.profile || {}) } : {}) });
 });
 
 app.get('/api/state/snapshots', (req, res) => res.json({ items: listSnapshots() }));
@@ -500,7 +510,7 @@ app.post('/api/packages/:id/approve', (req, res) => {
 // Published-URL registry: where each asset actually went live. Feeds
 // llms.txt canonical URLs, JSON-LD url/sameAs/SeekToAction, and the
 // cross_surface check (which counts live URLs, not drafts).
-app.post('/api/packages/:id/published', (req, res) => {
+app.post('/api/packages/:id/published', async (req, res) => {
   const { platformId, url } = req.body || {};
   if (!platformId) return res.status(400).json({ error: 'platformId required' });
   const u = String(url || '').trim();
@@ -519,7 +529,36 @@ app.post('/api/packages/:id/published', (req, res) => {
     }),
   }));
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
-  res.json({ package: pkg });
+  // Crawler-view audit: what does a plain, non-JavaScript bot see at this
+  // URL? Never blocks registration; the audit is stored beside the URL.
+  let audit = null;
+  if (u) audit = await auditUrl(u);
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      const rest = { ...(p.crawlerAudit || {}) };
+      if (audit) rest[platformId] = audit;
+      else delete rest[platformId];
+      return { ...p, crawlerAudit: rest };
+    }),
+  }));
+  pkg = packageStore.get().items.find((p) => p.id === req.params.id) || pkg;
+  res.json({ package: pkg, audit });
+});
+
+// Re-run the crawler-view audit on an already registered URL (after a site
+// fix, for example) without touching the registry.
+app.post('/api/packages/:id/audit', async (req, res) => {
+  const { platformId } = req.body || {};
+  const pkg0 = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg0) return res.status(404).json({ error: 'unknown package' });
+  const url = pkg0.publishedUrls?.[platformId];
+  if (!url) return res.status(400).json({ error: 'register a published URL for that platform first' });
+  const audit = await auditUrl(url);
+  packageStore.update((s) => ({
+    items: s.items.map((p) => (p.id === req.params.id ? { ...p, crawlerAudit: { ...(p.crawlerAudit || {}), [platformId]: audit } } : p)),
+  }));
+  res.json({ audit });
 });
 
 // Amplification step: a brand that publishes from a person and reshares

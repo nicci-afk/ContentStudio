@@ -1,5 +1,5 @@
 import { api, appState, pickOwnVoice, preferredVoice, saveVoicePref } from './api.js';
-import { el, field, textInput, textArea, toast, spinner, copyBtn, copyText, download, scoreBadge, emptyState } from './ui.js';
+import { el, field, textInput, textArea, toast, spinner, copyBtn, copyText, download, scoreBadge, emptyState, crawlerAuditView } from './ui.js';
 
 const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : String(v));
 
@@ -307,16 +307,17 @@ function publishedUrlRow(pkg, platformId, onPackageUpdated) {
   const save = el('button', {
     class: 'btn btn-ghost btn-xs', onclick: async () => {
       try {
-        const { package: updated } = await api.setPublishedUrl(pkg.id, platformId, input.value.trim());
+        const { package: updated, audit } = await api.setPublishedUrl(pkg.id, platformId, input.value.trim());
         Object.assign(pkg, updated);
-        toast(input.value.trim() ? 'Live URL registered · schema and llms.txt updated' : 'Live URL cleared');
+        toast(input.value.trim() ? `Live URL registered · schema and llms.txt updated${audit?.summary ? ` · crawler view: ${audit.summary}` : ''}` : 'Live URL cleared');
         onPackageUpdated?.();
       } catch (err) { toast(err.message, 'err'); }
     },
   }, current ? 'Update' : 'Save');
   return el('div', { class: 'asset-field' },
     el('span', { class: 'field-label' }, `Published URL${current ? ' · live ✓' : ' (paste after you post)'}`),
-    el('div', { class: 'row gap', style: 'margin-top:6px' }, input, save));
+    el('div', { class: 'row gap', style: 'margin-top:6px' }, input, save),
+    crawlerAuditView(pkg.crawlerAudit?.[platformId]));
 }
 
 // One tap matches library assets to the carousel's numbered slides, in

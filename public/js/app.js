@@ -11,6 +11,7 @@ import { renderStrategy } from './strategy.js';
 import { renderCreate } from './create.js';
 import { renderVoiceStudio, renderAvatarStudio } from './studios.js';
 import { renderPublish } from './publish.js';
+import { renderPlan } from './plan.js';
 
 const ROUTES = [
   { path: 'dashboard', label: 'Dashboard', icon: '◈', render: renderDashboard },
@@ -20,6 +21,7 @@ const ROUTES = [
   { path: 'library', label: 'Media Library', icon: '▣', render: renderLibrary },
   { path: 'strategy', label: 'Pillars & Series', icon: '≋', render: renderStrategy },
   { path: 'create', label: 'Create', icon: '⚡', render: renderCreate },
+  { path: 'plan', label: 'Plan', icon: '🗓', render: renderPlan },
   { path: 'voice-studio', label: 'Voice Studio', icon: '🎙', render: renderVoiceStudio },
   { path: 'avatar-studio', label: 'Avatar Studio', icon: '🎬', render: renderAvatarStudio },
   // Reached from a package's "Publish Run" button, not the nav.

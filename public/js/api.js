@@ -82,6 +82,12 @@ export const api = {
   cutClips: (renderId) => send('POST', `/api/render/${renderId}/clips`, {}),
   clipsStatus: (jobId) => get(`/api/render/clips/${jobId}`),
 
+  plan: () => get('/api/plan'),
+  savePlan: (plan) => send('PUT', '/api/plan', plan),
+  runPlan: (itemId) => send('POST', '/api/plan/run', itemId ? { itemId } : {}),
+  planRunStatus: (id) => get(`/api/plan/run/${id}`),
+  planQueue: () => get('/api/plan/queue'),
+
   avatars: () => get('/api/avatar/avatars'),
   avatarVoices: () => get('/api/avatar/voices'),
   avatarQuota: () => get('/api/avatar/quota'),

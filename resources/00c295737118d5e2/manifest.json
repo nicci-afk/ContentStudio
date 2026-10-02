@@ -1,0 +1,36 @@
+{
+  "person": "Nicci Grotefendt",
+  "legalName": "Travel GHR",
+  "senderAddress": "1012 North Main Street, Edwardsville, IL 62025",
+  "applyUrl": "https://consciouscreator.app/apply",
+  "lookInsideUrl": "https://consciouscreator.app/look-inside",
+  "resources": [
+    {
+      "slug": "destination-story-planner",
+      "title": "Destination Story Planner",
+      "file": "destination-story-planner.pdf",
+      "subject": "Your Destination Story Planner",
+      "buttonLabel": "Download the planner",
+      "emailIntro": "Here is the Destination Story Planner you asked for. It walks you through turning one trip you have taken into four weeks of content in your own voice.",
+      "emailNote": "Pick one trip, write quickly, and polish later. If a question stops you, reply and tell me where."
+    },
+    {
+      "slug": "advisor-starter-guide",
+      "title": "Relationship-Driven Advisor Starter Guide",
+      "file": "advisor-starter-guide.pdf",
+      "subject": "Your Relationship-Driven Advisor Starter Guide",
+      "buttonLabel": "Download the guide",
+      "emailIntro": "Here is the Relationship-Driven Advisor Starter Guide you asked for. It covers how to build trusted relationships with local partners and how to turn them into trips your clients ask for.",
+      "emailNote": "Start with the questions on page 3 and try them in your next conversation with a partner. I would love to hear what you learn."
+    },
+    {
+      "slug": "look-inside",
+      "title": "Look Inside The Conscious Creator",
+      "file": "look-inside.pdf",
+      "subject": "A Look Inside The Conscious Creator",
+      "buttonLabel": "Download the overview",
+      "emailIntro": "Here is the look inside The Conscious Creator that you asked for: five days in Akumal and Tulum, February 8 to 12, 2027, with the people and places behind them.",
+      "emailNote": "Seats are limited and selected by application. If it feels like a fit, I would be glad to read yours."
+    }
+  ]
+}

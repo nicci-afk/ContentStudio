@@ -16,7 +16,7 @@ export async function renderLeads(root) {
     root.replaceChildren(el('div', { class: 'view' }, el('p', { class: 'muted' }, `Could not load leads: ${err.message}`)));
     return;
   }
-  const state = { tier: '', status: '' };
+  const state = { tier: '', status: '', stage: '' };
   const view = el('div', { class: 'view' });
   const listHost = el('div', {});
 
@@ -27,7 +27,8 @@ export async function renderLeads(root) {
   const drawList = () => {
     const rows = data.items
       .filter((l) => !state.tier || l.score?.tier === state.tier)
-      .filter((l) => !state.status || l.status === state.status);
+      .filter((l) => !state.status || l.status === state.status)
+      .filter((l) => !state.stage || l.stage === state.stage);
     if (!rows.length) {
       listHost.replaceChildren(el('p', { class: 'muted' }, data.items.length
         ? 'No leads match those filters.'
@@ -51,7 +52,11 @@ export async function renderLeads(root) {
             l.cityState ? el('div', { class: 'muted' }, l.cityState) : null),
           el('td', { style: 'padding:8px', title: (l.score?.reasons || []).join('\n') }, badge(l.score?.tier)),
           el('td', { style: 'padding:8px' }, status),
-          el('td', { style: 'padding:8px' }, l.source?.utm_source || l.howHeard || '', l.source?.utm_campaign ? el('div', { class: 'muted' }, l.source.utm_campaign) : null),
+          el('td', { style: 'padding:8px' },
+            el('div', { style: 'font-weight:600' }, l.stage === 'application' ? 'Applied' : 'Resource'),
+            (l.resources || []).length ? el('div', { class: 'muted' }, l.resources.join(', ')) : null,
+            l.source?.utm_source || l.howHeard ? el('div', { class: 'muted' }, l.source?.utm_source || l.howHeard) : null,
+            l.unsubscribed ? el('div', { class: 'muted' }, 'unsubscribed') : null),
           el('td', { style: 'padding:8px' }, l.yearsAdvisor),
           el('td', { style: 'padding:8px;max-width:220px' }, (l.niche || []).join(', ')),
           el('td', { style: 'padding:8px;white-space:nowrap' },
@@ -113,18 +118,22 @@ export async function renderLeads(root) {
         },
       }, 'Get the bridge script'),
       scriptHost),
-    el('h3', { style: 'margin-top:18px' }, 'Meta Lead event'),
+    el('h3', { style: 'margin-top:18px' }, 'Free resources'),
+    el('p', { class: 'muted' }, (data.settings.resources || []).length
+      ? `Ready to deliver: ${data.settings.resources.map((r) => r.title).join('; ')}. A visitor signs up on your site, gets the file by email with a private link, and is recorded here with their consent. Every email carries a one-click unsubscribe.`
+      : 'No resources are set up for this business yet.'),
+    el('h3', { style: 'margin-top:18px' }, 'Meta events'),
     el('p', { class: 'muted' },
-      capi.tokenSet ? `Server connection is on for pixel ${capi.pixelId || '(none on the profile)'}${capi.testMode ? ' (test mode)' : ''}. A Lead event goes to Meta only for people who ticked your consent question, with a hashed email and nothing else.`
+      capi.tokenSet ? `Server connection is on for pixel ${capi.pixelId || '(none on the profile)'}${capi.testMode ? ' (test mode)' : ''}. A Lead event (free resource) or SubmitApplication event (application) goes to Meta only for people who gave advertising consent, with a hashed email and nothing else.`
         : 'Not connected. When you add a Meta access token on the server, a Lead event will be sent for consenting applicants only. Until then nothing is sent to Meta.'),
     el('p', { class: 'muted' }, 'To make this work, add one optional checkbox question to your Form: "I agree to be contacted about The Conscious Creator and to my information being used to measure our advertising." Without it, no Meta event is ever sent.'));
 
   view.append(
     el('div', { class: 'hero' }, el('h1', {}, 'Leads'), el('p', { class: 'sub' }, 'Applications and sign-ups for this business, scored so you can reach the strongest first.')),
     el('div', { class: 'row gap', style: 'flex-wrap:wrap' },
-      stat('Total', s.total), stat('A', s.byTier?.A), stat('B', s.byTier?.B), stat('C', s.byTier?.C), stat('New', s.byStatus?.new)),
+      stat('Total', s.total), stat('Applied', s.byStage?.application), stat('Resource', s.byStage?.resource), stat('A', s.byTier?.A), stat('B', s.byTier?.B), stat('C', s.byTier?.C), stat('New', s.byStatus?.new)),
     el('div', { class: 'card' },
-      el('div', { class: 'row gap', style: 'margin-bottom:10px' }, filter('All tiers', 'tier', ['A', 'B', 'C']), filter('All statuses', 'status', data.statuses)),
+      el('div', { class: 'row gap', style: 'margin-bottom:10px' }, filter('All tiers', 'tier', ['A', 'B', 'C']), filter('All statuses', 'status', data.statuses), filter('All sources', 'stage', ['resource', 'application'])),
       listHost),
     setup);
   root.replaceChildren(view);

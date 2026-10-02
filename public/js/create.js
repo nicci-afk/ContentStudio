@@ -7,9 +7,10 @@ export function renderCreate(root, params = null) {
   const openPackageId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
-  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', reelStyle: 'voice', quickFormats: new Set(['instagram_reel']) };
+  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', reelStyle: 'voice', tripId: 'auto', quickFormats: new Set(['instagram_reel']) };
   const QUICK = ['instagram_reel', 'instagram_post', 'facebook_reel', 'facebook'];
   let media = [];
+  let tripData = { items: [], autoPickId: null };
 
   const formCard = el('div', { class: 'card form-card' });
   const listWrap = el('div', {});
@@ -59,6 +60,17 @@ export function renderCreate(root, params = null) {
           return chip;
         })),
         quick ? el('p', { class: 'muted', style: 'margin:8px 0 0' }, 'Writes only what you pick, with 1 to 3 library assets, and skips the AI-answer layer. You can add more surfaces to it later.') : null),
+      (() => {
+        const live = tripData.items.filter((t) => t.status !== 'past' && t.useInContent !== false);
+        if (!live.length && !tripData.autoPickId) return document.createDocumentFragment();
+        const auto = tripData.items.find((t) => t.id === tripData.autoPickId);
+        const sel = el('select', { class: 'input select', onchange: (e) => { form.tripId = e.target.value; } },
+          el('option', { value: 'auto' }, auto ? `Automatic: ${auto.name}${auto.status === 'active' ? ' (on it now)' : ''}` : 'Automatic (no trip right now)'),
+          el('option', { value: 'none' }, 'No trip for this one'),
+          live.map((t) => el('option', { value: t.id }, `${t.name} (${t.start.slice(5)} to ${t.end.slice(5)})`)));
+        sel.value = form.tripId;
+        return field('Trip (optional)', sel, 'Writes from the real trip, tags the right place, and prefers footage shot during it.');
+      })(),
       quick ? el('div', { class: 'field' },
         el('span', { class: 'field-label' }, 'Reel style (for the reel formats)'),
         el('div', { class: 'chip-row' },
@@ -110,6 +122,7 @@ export function renderCreate(root, params = null) {
         platforms: [...(form.mode === 'quick' ? form.quickFormats : form.platforms)],
         quick: form.mode === 'quick',
         reelStyle: form.mode === 'quick' && form.reelStyle === 'music' ? 'music' : null,
+        tripId: form.tripId,
         mediaIds: form.autoMedia ? [] : [...form.mediaIds],
         autoMedia: form.autoMedia,
       });
@@ -175,6 +188,7 @@ export function renderCreate(root, params = null) {
   );
 
   api.media().then(({ items }) => { media = items; drawForm(); });
+  api.trips().then((d) => { tripData = d; drawForm(); }).catch(() => {});
   drawForm();
   drawList().then(() => { if (openPackageId) openDetail(openPackageId); });
   root.replaceChildren(container);

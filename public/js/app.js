@@ -13,6 +13,7 @@ import { renderVoiceStudio, renderAvatarStudio } from './studios.js';
 import { renderPublish } from './publish.js';
 import { renderLeads } from './leads.js';
 import { renderLedger } from './ledger.js';
+import { renderTrips } from './trips.js';
 
 const ROUTES = [
   { path: 'dashboard', label: 'Dashboard', icon: '◈', render: renderDashboard },
@@ -21,6 +22,7 @@ const ROUTES = [
   { path: 'testimonials', label: 'Testimonials', icon: '★', render: renderTestimonials },
   { path: 'library', label: 'Media Library', icon: '▣', render: renderLibrary },
   { path: 'strategy', label: 'Pillars & Series', icon: '≋', render: renderStrategy },
+  { path: 'trips', label: 'Trips', icon: '✈', render: renderTrips },
   { path: 'create', label: 'Create', icon: '⚡', render: renderCreate },
   { path: 'leads', label: 'Leads', icon: '✉', render: renderLeads },
   { path: 'visibility', label: 'Visibility', icon: '◎', render: renderLedger },

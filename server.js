@@ -15,7 +15,7 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
+const { stateStore, mediaStore, packageStore, tripStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace,
   listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary,
   leadStore, ledgerStore, findWorkspaceByLeadKey, findWorkspaceByCaptureId, findLeadByToken } =
@@ -34,6 +34,7 @@ const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
 const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
 const { buildSiteSetupKit } = await import('./lib/sitekit.js');
+const { normalizeTrip, upsertTrips, tripStatus, pickTrip, tripContextBlock, mediaInTrip, parseIcs, todayISO } = await import('./lib/trips.js');
 const { EVENT_SIZES, EVENT_TIMINGS, leadChannel, upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
 const { loadManifest, findResource, resourcePath } = await import('./lib/resources.js');
 
@@ -805,17 +806,73 @@ app.post('/api/pillars/suggest', wrap(async (req, res) => {
   res.json(result);
 }));
 
+// ---- trips ---------------------------------------------------------------
+// Manual first: trips are entered or picked from a calendar export. Each one
+// keeps its source and the calendar's event id, so a later automatic sync
+// can update the same trips instead of duplicating them.
+
+app.get('/api/trips', (req, res) => {
+  const today = todayISO();
+  const items = tripStore.get().items.map((t) => ({ ...t, status: tripStatus(t, today) }));
+  const picked = pickTrip(tripStore.get().items, today);
+  res.json({ today, items, autoPickId: picked?.id || null });
+});
+
+app.post('/api/trips/upsert', (req, res) => {
+  const incoming = Array.isArray(req.body?.trips) ? req.body.trips.slice(0, 200) : [];
+  if (!incoming.length) return res.status(400).json({ error: 'trips[] required' });
+  tripStore.update((s) => ({ items: upsertTrips(s.items, incoming) }));
+  res.json({ items: tripStore.get().items.map((t) => ({ ...t, status: tripStatus(t, todayISO()) })) });
+});
+
+app.put('/api/trips/:id', (req, res) => {
+  let hit = null;
+  tripStore.update((s) => ({
+    items: s.items.map((t) => {
+      if (t.id !== req.params.id) return t;
+      hit = normalizeTrip({ ...t, ...req.body, id: t.id, createdAt: t.createdAt, source: t.source, externalId: t.externalId });
+      return hit || t;
+    }),
+  }));
+  if (!hit) return res.status(400).json({ error: 'a trip needs a name and a valid start date (YYYY-MM-DD)' });
+  res.json({ trip: hit });
+});
+
+app.delete('/api/trips/:id', (req, res) => {
+  tripStore.update((s) => ({ items: s.items.filter((t) => t.id !== req.params.id) }));
+  res.json({ ok: true });
+});
+
+// Parses a Google Calendar (.ics) export and proposes upcoming all-day or
+// multi-day events. Nothing is saved: the creator ticks the trips.
+app.post('/api/trips/ics', (req, res) => {
+  const text = String(req.body?.ics || '');
+  if (!text.includes('BEGIN:VCALENDAR')) return res.status(400).json({ error: 'that does not look like a calendar (.ics) export' });
+  const have = new Set(tripStore.get().items.map((t) => t.externalId).filter(Boolean));
+  const candidates = parseIcs(text).slice(0, 300).map((c) => ({ ...c, exists: !!(c.externalId && have.has(c.externalId)) }));
+  res.json({ candidates, total: candidates.length });
+});
+
 // ---- generation (job-based so the UI can show live progress) -------------
 
 const jobs = new Map();
 
 app.post('/api/generate', wrap(async (req, res) => {
-  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick, reelStyle } = req.body;
+  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick, reelStyle, tripId } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   const state = stateStore.get();
   const profile = state.profile;
   const pillar = (profile.pillars || []).find((p) => p.id === pillarId) || null;
   const series = (profile.series || []).find((s) => s.id === seriesId) || null;
+
+  // Trip awareness: 'auto' (default) leans on the active or just-finished
+  // trip, a trip id picks that one, 'none' turns it off.
+  const trips = tripStore.get().items;
+  const today = todayISO();
+  const trip = tripId === 'none' ? null
+    : tripId && tripId !== 'auto' ? (trips.find((t) => t.id === tripId) || null)
+    : pickTrip(trips, today);
+  const tripBlock = tripId === 'none' ? '' : tripContextBlock(trips, trip, today);
 
   const jobId = uid();
   const job = { id: jobId, status: 'running', progress: { done: 0, total: (platforms?.length || 14) + (quick ? 0 : 1) }, package: null, error: null };
@@ -824,17 +881,24 @@ app.post('/api/generate', wrap(async (req, res) => {
   (async () => {
     let media = mediaStore.get().items.filter((m) => (mediaIds || []).includes(m.id));
     let mediaSelection = null;
+    let mediaFromTrip = 0;
     if (!media.length && autoMedia) {
       job.progress = { platform: 'selecting media from your library', done: 0, total: job.progress.total };
-      const sel = await selectMedia({ profile, topic, angle, pillar, items: mediaStore.get().items, count: quick ? 3 : 8 });
+      // Footage shot during the trip window comes first when there is enough of it.
+      const all = mediaStore.get().items;
+      const fromTrip = mediaInTrip(all, trip);
+      const pool = fromTrip.length >= 3 ? fromTrip : all;
+      mediaFromTrip = fromTrip.length >= 3 ? fromTrip.length : 0;
+      const sel = await selectMedia({ profile, topic, angle, pillar, items: pool, count: quick ? 3 : 8 });
       media = mediaStore.get().items.filter((m) => sel.ids.includes(m.id));
       mediaSelection = sel;
     }
     const pkg = await generatePackage({
-      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick, reelStyle: reelStyle === 'music' ? 'music' : null,
+      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick, reelStyle: reelStyle === 'music' ? 'music' : null, tripBlock, tripId: trip?.id || null,
       platformIds: platforms,
       onProgress: (p) => { job.progress = p; },
     });
+    if (trip && mediaFromTrip) pkg.tripMedia = mediaFromTrip;
     if (mediaSelection) {
       pkg.mediaSelection = mediaSelection.reasons;
       pkg.mediaSelectionMode = mediaSelection.mode;
@@ -1274,6 +1338,7 @@ app.post('/api/packages/:id/platforms', wrap(async (req, res) => {
   (async () => {
     const added = await generatePlatforms({
       profile: state.profile, pkg, platformIds: wanted, media,
+      tripBlock: (() => { const ts = tripStore.get().items; const t = ts.find((x) => x.id === pkg.tripId); return t ? tripContextBlock(ts, t) : ''; })(),
       onProgress: (p) => { job.progress = p; },
     });
     packageStore.update((s) => ({

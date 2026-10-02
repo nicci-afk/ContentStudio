@@ -18,7 +18,7 @@ if (fs.existsSync(envFile)) {
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace,
   listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary,
-  leadStore, findWorkspaceByLeadKey, findWorkspaceByCaptureId, findLeadByToken } =
+  leadStore, ledgerStore, findWorkspaceByLeadKey, findWorkspaceByCaptureId, findLeadByToken } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -34,7 +34,7 @@ const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
 const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
 const { buildSiteSetupKit } = await import('./lib/sitekit.js');
-const { leadChannel, upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
+const { EVENT_SIZES, EVENT_TIMINGS, leadChannel, upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
 const { loadManifest, findResource, resourcePath } = await import('./lib/resources.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
@@ -248,6 +248,9 @@ const corsHeaders = (res, origin) => {
 };
 const publicBase = (req) => `${String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0]}://${req.get('host')}`;
 const CONSENT_TEXT_V1 = 'Email me this resource and occasional notes about The Conscious Creator. I can unsubscribe at any time.';
+// Per-brand email context from the workspace manifest and profile (host shown in the footer, accent color).
+const siteHostOf = (manifest, biz) => manifest?.siteHost || (() => { try { return new URL(biz?.links?.website || '').hostname.replace(/^www\./, ''); } catch { return ''; } })();
+const mailCtx = (manifest) => ({ siteHost: siteHostOf(manifest, stateStore.get().profile?.business), accent: manifest?.accent });
 
 // Preflight: the page posts to /api/leads/capture?id=<captureId> so the browser's
 // OPTIONS request already names the workspace whose site origin may call it.
@@ -283,8 +286,9 @@ app.post('/api/leads/capture', wrap(async (req, res) => {
     const out = upsertLead(leadStore, {
       firstName: b.firstName, email: b.email, yearsAdvisor: b.yearsAdvisor, agency: b.agency,
       howHeard: HOW_HEARD.includes(b.howHeard) ? b.howHeard : '',
+      role: b.role, eventSize: EVENT_SIZES.includes(b.eventSize) ? b.eventSize : '', eventTiming: EVENT_TIMINGS.includes(b.eventTiming) ? b.eventTiming : '',
       consent: b.adConsent === true, sourceTags: tags, fbc: b.fbc, fbp: b.fbp,
-    }, { stage: 'resource', resource: resource.slug, optIn: { at: new Date().toISOString(), text: CONSENT_TEXT_V1, page: String(b.page || '').slice(0, 300) } });
+    }, { stage: 'resource', resource: resource.slug, optIn: { at: new Date().toISOString(), text: (loadManifest(wsId) || {}).consentText || CONSENT_TEXT_V1, page: String(b.page || '').slice(0, 300) } });
     if (out.error) return res.status(400).json({ error: out.error });
     const { lead } = out;
     const base = publicBase(req);
@@ -302,7 +306,7 @@ app.post('/api/leads/capture', wrap(async (req, res) => {
         const r = await sendResourceEmail({
           lead, resource, brand: manifest.legalName || biz.name || 'The Conscious Creator', person: manifest.person || biz.person?.name || '', address: manifest.senderAddress || '',
           downloadUrl, unsubUrl: `${base}/unsubscribe/${lead.token}`,
-          applyUrl: manifest.applyUrl || '', lookInsideUrl: manifest.lookInsideUrl || '', replyTo: settings.notifyEmail,
+          applyUrl: manifest.applyUrl || '', lookInsideUrl: manifest.lookInsideUrl || '', replyTo: settings.notifyEmail, ...mailCtx(manifest),
         });
         leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, delivery: stamp(r), deliveries: [...(x.deliveries || []), { slug: resource.slug, at: new Date().toISOString() }] } : x)) }));
       } catch (err) { record(lead.id, { delivery: stamp(errStatus(err)) }); }
@@ -374,7 +378,7 @@ async function runSequences(nowMs = Date.now()) {
           try {
             const r = await sendSequenceEmail({
               lead, step: due.step, brand: manifest.legalName || '', person: manifest.person || '', address: manifest.senderAddress || '',
-              unsubUrl: `${base}/unsubscribe/${lead.token}`, replyTo: settings.notifyEmail,
+              unsubUrl: `${base}/unsubscribe/${lead.token}`, replyTo: settings.notifyEmail, ...mailCtx(manifest),
             });
             if (r.status === 'sent') patchSeq((q) => ({ ...q, sent: [...(q.sent || []), { day: due.step.day, at: new Date().toISOString() }] }));
           } catch (err) {
@@ -447,7 +451,7 @@ app.post('/api/leads/sequence/test', wrap(async (req, res) => {
     const r = await sendSequenceEmail({
       lead: { firstName: 'Friend', email: to }, step, to, subjectPrefix: '[PREVIEW] ',
       brand: manifest.legalName || '', person: manifest.person || '', address: manifest.senderAddress || '',
-      unsubUrl: `${base}/unsubscribe/preview`, replyTo: to,
+      unsubUrl: `${base}/unsubscribe/preview`, replyTo: to, ...mailCtx(manifest),
     });
     res.json({ ok: true, ...r });
   } catch (err) { res.status(502).json({ error: String(err.message).slice(0, 200) }); }
@@ -472,6 +476,87 @@ app.delete('/api/leads/:id', (req, res) => {
   leadStore.set({ ...d, items: d.items.filter((x) => x.id !== req.params.id) });
   res.json({ ok: true });
 });
+
+// ---- Visibility Ledger ----------------------------------------------------
+// Fixed buyer questions per workspace, checked monthly (and on demand) to see
+// whether AI answers name the brand and cite its own pages. Answers from other
+// assistants are pasted in by hand. See lib/ledger.js.
+const { ENGINES, MONTH_MS, newQuestions, summarize, runClaudeCheck, recordManual, suggestQuestions } = await import('./lib/ledger.js');
+const ledgerRunning = new Set();
+const ledgerView = (wsId) => {
+  const data = ledgerStore.get();
+  const sum = summarize(data);
+  return {
+    settings: { enabled: !!data.settings?.enabled, terms: data.settings?.terms || [], domains: data.settings?.domains || [], lastRunAt: data.settings?.lastRunAt || null },
+    questions: sum.questions, byEngine: sum.byEngine, history: sum.history.slice(0, 24),
+    engines: ENGINES, running: ledgerRunning.has(wsId) || sum.runs.some((r) => r.status === 'running'),
+    aiConfigured: !!process.env.ANTHROPIC_API_KEY,
+  };
+};
+const startLedgerRun = (wsId) => {
+  ledgerRunning.add(wsId);
+  runWithWorkspace(wsId, () => runClaudeCheck(ledgerStore, stateStore.get().profile))
+    .catch((err) => console.error('ledger run failed:', err.message))
+    .finally(() => ledgerRunning.delete(wsId));
+};
+app.get('/api/ledger', (req, res) => res.json(ledgerView(listWorkspaces().activeId)));
+app.put('/api/ledger/questions', (req, res) => {
+  const list = Array.isArray(req.body?.questions) ? req.body.questions : [];
+  ledgerStore.update((d) => ({ ...d, questions: newQuestions(d.questions || [], list) }));
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+app.put('/api/ledger/settings', (req, res) => {
+  const b = req.body || {};
+  const list = (v) => (Array.isArray(v) ? v : String(v || '').split(/[\n,]+/)).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 20);
+  ledgerStore.update((d) => ({ ...d, settings: {
+    ...(d.settings || {}),
+    ...(b.enabled !== undefined ? { enabled: b.enabled === true } : {}),
+    ...(b.terms !== undefined ? { terms: list(b.terms) } : {}),
+    ...(b.domains !== undefined ? { domains: list(b.domains) } : {}),
+  } }));
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+app.post('/api/ledger/suggest', wrap(async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  res.json({ questions: await suggestQuestions(stateStore.get().profile) });
+}));
+app.post('/api/ledger/run', (req, res) => {
+  const wsId = listWorkspaces().activeId;
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (ledgerRunning.has(wsId)) return res.status(409).json({ error: 'a check is already running' });
+  if (!ledgerStore.get().questions?.length) return res.status(400).json({ error: 'add at least one question first' });
+  startLedgerRun(wsId);
+  res.status(202).json({ started: true });
+});
+app.post('/api/ledger/manual', (req, res) => {
+  try { recordManual(ledgerStore, stateStore.get().profile, req.body || {}); } catch (err) { return res.status(400).json({ error: err.message }); }
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+app.delete('/api/ledger/runs/:id', (req, res) => {
+  ledgerStore.update((d) => ({ ...d, runs: (d.runs || []).filter((r) => r.id !== req.params.id) }));
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+// Monthly auto-check: only for workspaces that switched it on and have questions.
+let ledgerSweeping = false;
+async function sweepLedgers(nowMs = Date.now()) {
+  if (ledgerSweeping || !process.env.ANTHROPIC_API_KEY) return;
+  ledgerSweeping = true;
+  try {
+    for (const w of listWorkspaces().items) {
+      if (ledgerRunning.has(w.id)) continue;
+      const due = await runWithWorkspace(w.id, async () => {
+        const d = ledgerStore.get();
+        const last = Date.parse(d.settings?.lastRunAt || '') || 0;
+        return d.settings?.enabled && d.questions?.length && nowMs - last >= MONTH_MS;
+      });
+      if (due) { startLedgerRun(w.id); while (ledgerRunning.has(w.id)) await new Promise((r) => setTimeout(r, 5000)); }
+    }
+  } finally { ledgerSweeping = false; }
+}
+if (!process.env.DISABLE_LEDGER) {
+  setTimeout(() => sweepLedgers().catch(() => {}), Number(process.env.LEDGER_FIRST_RUN_MS || 5 * 60 * 1000)).unref?.();
+  setInterval(() => sweepLedgers().catch(() => {}), 6 * 3600 * 1000).unref?.();
+}
 
 // Token and prompt-cache ledger for this server process (resets on restart).
 app.get('/api/usage', (req, res) => res.json(usageReport()));

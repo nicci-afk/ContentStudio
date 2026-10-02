@@ -127,7 +127,7 @@ export async function renderLeads(root) {
     el('p', { class: 'muted' },
       capi.tokenSet ? `Server connection is on for pixel ${capi.pixelId || '(none on the profile)'}${capi.testMode ? ' (test mode)' : ''}. A Lead event (free resource) or SubmitApplication event (application) goes to Meta only for people who gave advertising consent, with a hashed email and nothing else.`
         : 'Not connected. When you add a Meta access token on the server, a Lead event will be sent for consenting applicants only. Until then nothing is sent to Meta.'),
-    el('p', { class: 'muted' }, 'To make this work, add one optional checkbox question to your Form: "I agree to be contacted about The Conscious Creator and to my information being used to measure our advertising." Without it, no Meta event is ever sent.'));
+    el('p', { class: 'muted' }, 'To make this work, add one optional checkbox question to your Form: "I agree to be contacted about this business and to my information being used to measure our advertising." Without it, no Meta event is ever sent.'));
 
   const seq = data.settings.sequence || { enabled: false, steps: [] };
   const seqToggle = el('input', { type: 'checkbox', checked: seq.enabled ? true : null, onchange: async (e) => {

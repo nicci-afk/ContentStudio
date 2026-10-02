@@ -10,6 +10,8 @@ export function renderCreate(root, params = null) {
   const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', quickFormats: new Set(['instagram_reel']) };
   const QUICK = ['instagram_reel', 'instagram_post', 'facebook_reel', 'facebook'];
   let media = [];
+  let mediaTotal = 0;
+  let mediaQuery = '';
 
   const formCard = el('div', { class: 'card form-card' });
   const listWrap = el('div', {});
@@ -60,8 +62,8 @@ export function renderCreate(root, params = null) {
         })),
         quick ? el('p', { class: 'muted', style: 'margin:8px 0 0' }, 'Writes only what you pick, with 1 to 3 library assets, and skips the AI-answer layer. You can add more surfaces to it later.') : null),
       el('div', { class: 'field' },
-        el('span', { class: 'field-label' }, `Media (${media.length} in library)`),
-        media.length
+        el('span', { class: 'field-label' }, `Media (${mediaTotal.toLocaleString()} ready to use in this library)`),
+        mediaTotal || mediaQuery
           ? el('div', {},
               el('button', {
                 class: `chip chip-toggle ${form.autoMedia ? 'on' : ''}`,
@@ -74,13 +76,18 @@ export function renderCreate(root, params = null) {
               form.autoMedia
                 ? el('p', { class: 'muted', style: 'margin:8px 0 0' },
                     'The engine scans your analyzed library and selects the assets with the strongest visibility metadata and story fit for this topic — you\'ll see each pick and why in the finished package.')
-                : el('div', { class: 'mini-media-row', style: 'margin-top:8px' }, media.slice(0, 60).map((m) => {
+                : el('div', {},
+                    el('input', {
+                      class: 'input', type: 'text', placeholder: 'Search your library (place, subject, keyword)…', value: mediaQuery, style: 'margin-top:8px;max-width:340px',
+                      onchange: async (e) => { mediaQuery = e.target.value.trim(); await loadMedia(); },
+                    }),
+                    el('div', { class: 'mini-media-row', style: 'margin-top:8px' }, media.slice(0, 60).map((m) => {
                     const img = el('img', {
                       class: `mini-thumb ${form.mediaIds.has(m.id) ? 'on' : ''}`, src: `/api/media/${m.id}/thumb`, alt: m.alt || m.name, title: m.caption || m.name,
                       onclick: () => { form.mediaIds.has(m.id) ? form.mediaIds.delete(m.id) : form.mediaIds.add(m.id); img.classList.toggle('on'); },
                     });
                     return img;
-                  })))
+                  }))))
           : el('span', { class: 'muted' }, 'Import photos/videos in the Library and they appear here for b-roll and carousel matching.')),
       el('button', {
         class: 'btn btn-primary btn-lg', onclick: async () => {
@@ -167,7 +174,11 @@ export function renderCreate(root, params = null) {
     formCard, listWrap, detailWrap,
   );
 
-  api.media().then(({ items }) => { media = items; drawForm(); });
+  // Only screened, usable items are offered, best first; the library can be far
+  // larger than a picker should render, so it loads a page and searches on demand.
+  const loadMedia = () => api.media({ usable: true, limit: 60, sort: mediaQuery ? 'taken' : 'quality', q: mediaQuery })
+    .then(({ items, total }) => { media = items; if (!mediaQuery) mediaTotal = total; drawForm(); });
+  loadMedia();
   drawForm();
   drawList().then(() => { if (openPackageId) openDetail(openPackageId); });
   root.replaceChildren(container);

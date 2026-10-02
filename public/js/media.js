@@ -244,7 +244,14 @@ function videoFrames(file, timeoutMs = 12000) {
 
 // ---- import + analyze pipeline -------------------------------------------
 
-async function importFiles(files, onStatus, existing = []) {
+async function importFiles(files, onStatus) {
+  // Duplicate detection runs on the server: the library can hold tens of
+  // thousands of items, far too many to download just to compare file names.
+  const existing = [];
+  for (let i = 0; i < files.length; i += 2000) {
+    const { items } = await api.matchMedia(files.slice(i, i + 2000).map((f) => ({ name: f.name, size: f.size })));
+    existing.push(...items);
+  }
   const byKey = new Map(existing.map((i) => [`${i.name}|${i.size}`, i]));
   const fresh = [];
   const retrofits = [];
@@ -329,106 +336,254 @@ async function importFiles(files, onStatus, existing = []) {
   return results.filter((r) => r && !r.__error);
 }
 
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+const dateRange = (a, b) => (!a ? '' : fmtDate(a).slice(0, 40) === fmtDate(b).slice(0, 40) ? fmtDate(a) : `${fmtDate(a)} to ${fmtDate(b)}`);
+const PAGE = 200;
+
 export function renderLibrary(root) {
   const container = el('div', { class: 'view' });
-  let items = [];
   const aiReady = appState.health?.providers?.anthropic;
+  const view = { tab: 'all', q: '', kind: '', sort: 'taken', favorite: false, album: null, albumName: null };
+  const data = { items: [], total: 0, held: 0, pending: 0, loading: false };
 
   const status = el('div', { class: 'import-status' });
-  const grid = el('div', { class: 'media-grid' });
+  const summary = el('p', { class: 'sub lib-summary' });
+  const body = el('div', {});
+  const tabs = el('div', { class: 'tab-row' });
 
-  const refresh = async () => {
-    items = (await api.media()).items;
-    drawGrid();
+  // ---- analysis (server-side queue, newest captures first) -------------
+  let pollTimer = null;
+  const pollAnalysis = async () => {
+    clearTimeout(pollTimer);
+    try {
+      const { state } = await api.mediaAnalysis();
+      if (state.running) {
+        status.replaceChildren(spinner(`Analyzing ${state.done}/${state.total}${state.held ? ` · ${state.held} held for review` : ''}${state.failed ? ` · ${state.failed} failed` : ''}…`));
+        pollTimer = setTimeout(pollAnalysis, 2500);
+        return;
+      }
+      if (status.firstChild) {
+        status.replaceChildren();
+        if (state.stopped) toast(`Analysis stopped: ${state.stopped}`, 'err');
+        else toast(`Analysis finished: ${state.done} item(s)${state.held ? `, ${state.held} held for review` : ''}`);
+        await loadFirstPage();
+      }
+    } catch { /* transient; the next action retries */ }
   };
 
   const analyzeAll = async () => {
-    const pending = items.filter((i) => !i.analyzed);
-    if (!pending.length) return toast('Everything is already analyzed');
-    // The server already retries a rate-limited Claude call with backoff, so
-    // this is a second line of defense for a bulk run large enough to
-    // outlast that: any 429 that still reaches here pushes out a shared
-    // cooldown every worker waits out before its next request, so the whole
-    // batch slows down together instead of each item hammering separately.
-    const CONCURRENCY = 5;
-    let n = 0;
-    let stop = false;
-    let cooldownUntil = 0;
-    const waitForCooldown = async () => {
-      const wait = cooldownUntil - Date.now();
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    };
-    status.replaceChildren(spinner(`Analyzing 0/${pending.length} (${CONCURRENCY} in parallel)…`));
-    const results = await pool(pending, CONCURRENCY, async (item) => {
-      if (stop) return null;
-      for (let attempt = 0; ; attempt++) {
-        await waitForCooldown();
-        try {
-          await api.analyzeMedia(item.id);
-          break;
-        } catch (err) {
-          if (/not configured/i.test(err.message)) { stop = true; throw err; }
-          if (err.status === 429 && attempt < 3) {
-            const delay = Math.min(20000, 3000 * 2 ** attempt) + Math.random() * 1000;
-            cooldownUntil = Math.max(cooldownUntil, Date.now() + delay);
-            continue;
-          }
-          throw err;
-        }
-      }
-      status.replaceChildren(spinner(`Analyzing ${++n}/${pending.length} (${CONCURRENCY} in parallel)…`));
-      return item.id;
-    });
-    for (const r of results) {
-      if (r?.__error && !stop) toast(`${r.__name}: ${r.__error}`, 'err');
-    }
-    status.replaceChildren();
-    await refresh();
-    toast(stop ? 'Analysis needs the Claude key on the server' : 'Library analyzed — alt text, keywords, geo, and story ideas attached');
+    if (!aiReady) return toast('Analysis needs the Claude key on the server', 'err');
+    try {
+      const { estimate } = await api.startAnalysis({ dryRun: true });
+      if (!estimate.items) return toast('Everything is already analyzed');
+      const ok = window.confirm(`Analyze ${estimate.items.toLocaleString()} item(s), newest captures first?\n\nRough size: ${(estimate.approxInputTokens / 1e6).toFixed(1)}M input tokens and ${(estimate.approxOutputTokens / 1e6).toFixed(1)}M output tokens. It runs on the server, so you can close this page.`);
+      if (!ok) return;
+      await api.startAnalysis({});
+      status.replaceChildren(spinner('Analyzing…'));
+      pollAnalysis();
+    } catch (err) { toast(err.message, 'err'); }
   };
 
+  // ---- in-app import ------------------------------------------------------
   const fileInput = el('input', {
     class: 'hidden-input', type: 'file', multiple: true, accept: 'image/*,video/*', id: 'media-picker',
     onchange: async (e) => {
       const files = [...e.target.files];
       if (!files.length) return;
-      const imported = await importFiles(files, (msg) => status.replaceChildren(spinner(msg)), items);
+      const imported = await importFiles(files, (msg) => status.replaceChildren(spinner(msg)));
       status.replaceChildren();
       e.target.value = '';
-      await refresh();
+      await loadFirstPage();
       toast(`${imported.length} asset(s) imported`);
-      if (aiReady && imported.length) analyzeAll();
+      if (aiReady && imported.length) { try { await api.startAnalysis({}); status.replaceChildren(spinner('Analyzing…')); pollAnalysis(); } catch (err) { toast(err.message, 'err'); } }
     },
   });
 
-  const drawGrid = () => {
+  // ---- all items (paginated, filterable) --------------------------------
+  const grid = el('div', { class: 'media-grid' });
+  const more = el('div', { class: 'row gap', style: 'justify-content:center;margin:14px 0' });
+  const loadPage = async (reset) => {
+    if (data.loading) return;
+    data.loading = true;
+    try {
+      const r = await api.media({
+        limit: PAGE, offset: reset ? 0 : data.items.length, sort: view.sort, q: view.q,
+        kind: view.kind, favorite: view.favorite, album: view.album,
+      });
+      data.items = reset ? r.items : [...data.items, ...r.items];
+      Object.assign(data, { total: r.total, held: r.held, pending: r.pending });
+    } finally { data.loading = false; }
+    drawGridInto();
+    drawSummary();
+  };
+  const loadFirstPage = () => loadPage(true);
+
+  const drawSummary = () => {
+    summary.replaceChildren(`${data.total.toLocaleString()} item${data.total === 1 ? '' : 's'}${view.q || view.kind || view.favorite || view.album ? ' match' : ''}${data.pending ? ` · ${data.pending.toLocaleString()} being screened` : ''}${data.held ? ` · ${data.held.toLocaleString()} held` : ''}. Your photos and videos, enriched with AI-visibility metadata and matched to content.`);
+    const heldTab = tabs.querySelector('[data-tab="held"]');
+    if (heldTab) heldTab.textContent = `Held${data.held ? ` (${data.held})` : ''}`;
+  };
+
+  const drawGridInto = () => {
     grid.replaceChildren();
-    if (!items.length) {
-      grid.append(emptyState('Your library is empty',
-        'On iPhone, tap Import and Safari opens your photo library — select as many photos and videos as you like. The studio extracts capture dates and GPS, then AI writes alt text, keywords, and story ideas for every asset.'));
-      return;
+    if (!data.items.length) {
+      grid.append(emptyState(data.total === 0 && !view.q && !view.album && !view.kind && !view.favorite ? 'This library is empty' : 'Nothing matches',
+        data.total === 0 && !view.q && !view.album && !view.kind && !view.favorite
+          ? 'Import photos and videos here, or load your whole Photos library with the Photos sync tool (tools/photos-sync). Each asset is screened, then AI writes alt text, keywords, and story ideas.'
+          : 'Try a different search or clear the filters.'));
+    } else {
+      for (const item of data.items) grid.append(mediaCard(item, () => loadFirstPage()));
     }
-    for (const item of items) grid.append(mediaCard(item, refresh));
+    more.replaceChildren(data.items.length < data.total
+      ? el('button', { class: 'btn btn-ghost', onclick: () => loadPage(false) }, `Show more (${(data.total - data.items.length).toLocaleString()} left)`)
+      : '');
+  };
+
+  let searchTimer = null;
+  const allView = () => {
+    const search = textInput({
+      placeholder: 'Search captions, keywords, places, file names…', value: view.q, style: 'max-width:340px',
+      oninput: (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { view.q = e.target.value.trim(); loadFirstPage(); }, 280); },
+    });
+    const sel = (opts, key) => {
+      const s = el('select', { class: 'input', onchange: (e) => { view[key] = e.target.value; loadFirstPage(); } },
+        opts.map(([v, label]) => el('option', { value: v, ...(view[key] === v ? { selected: true } : {}) }, label)));
+      return s;
+    };
+    const fav = el('label', { class: 'row gap', style: 'align-items:center;font-size:13px' },
+      el('input', { type: 'checkbox', ...(view.favorite ? { checked: true } : {}), onchange: (e) => { view.favorite = e.target.checked; loadFirstPage(); } }), 'Favorites');
+    const albumChip = view.album ? el('span', { class: 'chip chip-toggle on', onclick: () => { view.album = null; view.albumName = null; drawBody(); loadFirstPage(); } }, `Album: ${view.albumName || 'selected'}  ✕`) : null;
+    return el('div', {},
+      view.album ? albumPanel(view.album) : null,
+      el('div', { class: 'row gap wrap lib-toolbar' },
+        search,
+        sel([['', 'Photos and videos'], ['image', 'Photos only'], ['video', 'Videos only']], 'kind'),
+        sel([['taken', 'Newest captures'], ['added', 'Recently added'], ['quality', 'Best quality']], 'sort'),
+        fav, albumChip),
+      grid, more);
+  };
+
+  // ---- albums -----------------------------------------------------------
+  const albumPanel = (albumId) => {
+    const box = el('div', { class: 'profile-box' }, spinner('Loading album…'));
+    api.album(albumId).then(({ album }) => {
+      const p = album.profile;
+      const list = (title, arr) => (arr?.length ? el('div', {}, el('span', { class: 'field-label' }, title), el('div', { class: 'chip-row' }, arr.map((x) => el('span', { class: 'chip' }, x)))) : null);
+      box.replaceChildren(
+        el('div', { class: 'row spread' },
+          el('div', {},
+            el('h3', { style: 'margin:0' }, album.name),
+            el('span', { class: 'muted' }, [album.folder?.length ? album.folder.join(' / ') : null, `${album.stats.items.toLocaleString()} items (${album.stats.photos} photos, ${album.stats.videos} videos)`, dateRange(album.stats.from, album.stats.to), album.stats.places?.slice(0, 3).join(', ')].filter(Boolean).join(' · '))),
+          el('button', {
+            class: 'btn btn-ghost btn-xs',
+            onclick: async (e) => {
+              e.target.textContent = 'Building…';
+              try { await api.buildAlbumProfile(albumId); drawBody(); loadFirstPage(); } catch (err) { toast(err.message, 'err'); e.target.textContent = p ? 'Rebuild profile' : 'Build profile'; }
+            },
+          }, p ? 'Rebuild profile' : '✦ Build profile')),
+        p ? el('div', {},
+          el('p', { style: 'margin:8px 0' }, p.summary),
+          p.mood ? el('p', { class: 'muted', style: 'margin:0 0 6px' }, `Mood: ${p.mood}`) : null,
+          list('Themes', p.themes), list('Best uses', p.bestUses), list('Supports pillars', p.pillarsFit),
+          list('Topic ideas', p.suggestedTopics), list('Missing shots', p.gaps),
+          p.heroIds?.length ? el('div', {}, el('span', { class: 'field-label' }, 'Hero shots'),
+            el('div', { class: 'mini-media-row' }, p.heroIds.map((id) => el('img', { class: 'mini-thumb', src: `/api/media/${id}/thumb`, alt: 'hero shot' })))) : null)
+          : el('p', { class: 'muted' }, album.stats.analyzed ? 'No profile yet. Build one and the engine will know how this album can be used.' : 'Analyze this album first, then build its profile.'));
+    }).catch((err) => box.replaceChildren(el('span', { class: 'muted' }, err.message)));
+    return box;
+  };
+
+  const albumsView = () => {
+    const wrap = el('div', {}, spinner('Loading albums…'));
+    api.albums().then(({ albums }) => {
+      const pending = albums.filter((a) => !a.hasProfile && a.stats.analyzed).length;
+      wrap.replaceChildren(
+        el('div', { class: 'row gap wrap lib-toolbar' },
+          el('span', { class: 'muted' }, `${albums.length.toLocaleString()} album${albums.length === 1 ? '' : 's'}`),
+          el('button', {
+            class: 'btn btn-ghost btn-xs', disabled: !aiReady || !pending,
+            title: 'Builds a profile for every analyzed album that has none: what it is, where and when, and how it can be used in content.',
+            onclick: async () => {
+              try { await api.buildAllProfiles(); toast('Building album profiles in the background'); } catch (err) { toast(err.message, 'err'); }
+            },
+          }, `✦ Build ${pending} album profile${pending === 1 ? '' : 's'}`)),
+        albums.length ? el('div', { class: 'media-grid album-grid' }, albums.map((a) => el('div', {
+          class: 'media-card album-card', onclick: () => { view.album = a.id; view.albumName = a.name; view.tab = 'all'; drawTabs(); drawBody(); loadFirstPage(); },
+        },
+          el('div', { class: 'media-thumb-wrap' }, a.stats.coverId ? el('img', { class: 'media-thumb', src: `/api/media/${a.stats.coverId}/thumb`, alt: a.name, loading: 'lazy' }) : null,
+            a.hasProfile ? el('span', { class: 'media-analyzed', title: 'AI profile ready' }, '✦') : null),
+          el('div', { class: 'media-meta' },
+            el('strong', {}, a.name),
+            el('span', { class: 'muted' }, `${a.stats.items.toLocaleString()} items${a.stats.videos ? ` · ${a.stats.videos} videos` : ''}`),
+            a.stats.from ? el('span', { class: 'muted' }, dateRange(a.stats.from, a.stats.to)) : null,
+            a.summary ? el('span', { class: 'muted album-summary' }, a.summary) : null))))
+          : emptyState('No albums yet', 'Albums come from your Photos app through the Photos sync tool, so every collection you built stays a collection here.'));
+    }).catch((err) => wrap.replaceChildren(emptyState('Could not load albums', err.message)));
+    return wrap;
+  };
+
+  // ---- held review (private: filenames and reasons only, never an image) --
+  const heldView = () => {
+    const wrap = el('div', {}, spinner('Loading…'));
+    api.moderation().then(({ counts, held, scan }) => {
+      wrap.replaceChildren(
+        el('div', { class: 'profile-box' },
+          el('strong', {}, 'Nothing here is shown as an image.'),
+          el('p', { class: 'muted', style: 'margin:6px 0 0' },
+            'Anything flagged as nudity or sexual content, by the check on your Mac or by the AI check here, is held. Its files are deleted from storage, it never appears in selection, renders or publishing, and it can only come back if you approve it below and then run the Photos sync again. Artwork such as statues is held too, so you decide.'),
+          el('div', { class: 'row gap', style: 'margin-top:10px' },
+            el('button', {
+              class: 'btn btn-ghost btn-xs', disabled: !aiReady,
+              title: 'Runs the same safety check over items imported before screening existed. Clean ones are stamped clear; flagged ones are held.',
+              onclick: async () => {
+                try {
+                  const { items } = await api.scanLegacy({ dryRun: true });
+                  if (!items) return toast('Every item has already been checked');
+                  if (!window.confirm(`Safety-check ${items.toLocaleString()} older item(s)? One small AI call each.`)) return;
+                  await api.scanLegacy({});
+                  toast('Safety check running in the background');
+                } catch (err) { toast(err.message, 'err'); }
+              },
+            }, '✦ Safety-check older items'),
+            scan?.running ? el('span', { class: 'muted' }, `Checking ${scan.done}/${scan.total}…`) : null)),
+        held.length ? el('div', { class: 'held-list' }, held.map((h) => el('div', { class: 'held-row' },
+          el('div', {}, el('strong', {}, h.name), el('span', { class: 'muted' }, ` ${h.takenAt ? fmtDate(h.takenAt) : ''}`),
+            el('div', { class: 'muted' }, `${h.reason || 'held'} · ${h.source === 'mac-local' ? 'held on your Mac, never uploaded' : 'held by the AI check'}`)),
+          h.releaseApproved
+            ? el('div', { class: 'row gap' }, el('span', { class: 'chip' }, 'Approved: uploads on next sync'),
+              el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => { await api.revokeRelease(h.id); drawBody(); } }, 'Undo'))
+            : el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => { await api.approveRelease(h.id); toast('Approved. It uploads again on the next Photos sync.'); drawBody(); } }, 'Approve for next sync'))))
+          : emptyState('Nothing is held', `${counts.pending ? `${counts.pending} item(s) are still being screened. ` : ''}Flagged items will be listed here by file name, with the reason.`));
+    }).catch((err) => wrap.replaceChildren(emptyState('Could not load', err.message)));
+    return wrap;
+  };
+
+  // ---- tabs --------------------------------------------------------------
+  const drawBody = () => { body.replaceChildren(view.tab === 'albums' ? albumsView() : view.tab === 'held' ? heldView() : allView()); if (view.tab === 'all') drawGridInto(); };
+  const drawTabs = () => {
+    tabs.replaceChildren(...[['all', 'All'], ['albums', 'Albums'], ['held', `Held${data.held ? ` (${data.held})` : ''}`]].map(([id, label]) =>
+      el('button', { class: `tab ${view.tab === id ? 'active' : ''}`, 'data-tab': id, onclick: () => { view.tab = id; drawTabs(); drawBody(); } }, label)));
   };
 
   container.append(
     el('div', { class: 'view-head' },
-      el('div', {},
-        el('h1', {}, 'Media Library'),
-        el('p', { class: 'sub' }, 'Shared across every business. Your real photos and videos, enriched with AI-visibility metadata and matched to content.')),
+      el('div', {}, el('h1', {}, 'Media Library'), summary),
       el('div', { class: 'row gap' },
         el('label', { class: 'btn btn-primary', for: 'media-picker' }, '⬆ Import from device'),
         el('button', { class: 'btn btn-ghost', onclick: analyzeAll }, aiReady ? '✦ Analyze all' : '✦ Analyze all (needs Claude key)'))),
-    fileInput, status, grid,
+    fileInput, status, tabs, body,
   );
 
-  refresh();
+  drawTabs();
+  drawBody();
+  loadFirstPage().then(pollAnalysis);
   root.replaceChildren(container);
 }
 
 function mediaCard(item, refresh) {
   const detail = el('div', { class: 'media-detail' });
   let open = false;
+  const screening = item.moderation?.status === 'pending';
 
   const card = el('div', { class: 'media-card' },
     el('div', {
@@ -442,6 +597,8 @@ function mediaCard(item, refresh) {
           ? 'Full footage stored: renders use the real moving clip'
           : 'Only a preview frame is stored. Re-import this video file and the footage attaches automatically, so renders can use the real clip'),
       }, item.kind === 'video' ? (item.hasOriginal ? '▶ video' : '▶ frame only') : 'photo'),
+      screening ? el('span', { class: 'media-flag', title: 'Not selectable until the safety check on this item passes' }, 'screening') : null,
+      item.apple?.favorite ? el('span', { class: 'media-fav', title: 'Favorite in Photos' }, '♥') : null,
       item.analyzed ? el('span', { class: 'media-analyzed' }, '✦') : null),
     el('div', { class: 'media-meta' },
       el('strong', {}, item.caption || item.name),
@@ -468,7 +625,7 @@ function mediaCard(item, refresh) {
             class: 'btn btn-ghost btn-xs',
             href: `/api/media/${item.id}/file`,
             download: '',
-            title: 'Download the full-size stored copy with a keyword filename. Pair it with the alt text above when posting: platforms strip embedded photo metadata, so the alt text field is what carries it.',
+            title: 'Download the full-quality stored copy with a keyword filename. Pair it with the alt text above when posting: platforms strip embedded photo metadata, so the alt text field is what carries it.',
           }, '⬇ Download'),
           item.kind === 'video' && item.hasOriginal ? el('a', {
             class: 'btn btn-ghost btn-xs',
@@ -479,8 +636,11 @@ function mediaCard(item, refresh) {
           el('button', {
             class: 'btn btn-ghost btn-xs', onclick: async () => {
               detail.replaceChildren(spinner('Analyzing…'));
-              try { await api.analyzeMedia(item.id); await refresh(); }
-              catch (err) { toast(err.message, 'err'); drawDetail(); }
+              try {
+                const r = await api.analyzeMedia(item.id);
+                if (r.held) toast('This item was held for review and removed from the library', 'err');
+                await refresh();
+              } catch (err) { toast(err.message, 'err'); drawDetail(); }
             },
           }, item.analyzed ? 'Re-analyze' : '✦ Analyze'),
           el('button', {

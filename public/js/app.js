@@ -154,8 +154,8 @@ POST /api/avatar/generate avatar video
 GET  /llms.txt            live AI-crawler manifest`),
         el('p', { class: 'muted' }, 'Full reference in README.md.'))));
 
-  api.media().then(({ items }) => {
-    if (items.length) {
+  api.media({ limit: 1 }).then(({ total }) => {
+    if (total) {
       const stepEl = container.querySelectorAll('.setup-step')[2];
       stepEl?.classList.add('done');
       stepEl?.querySelector('.check-mark')?.replaceChildren('✓');

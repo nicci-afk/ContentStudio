@@ -810,7 +810,7 @@ app.post('/api/pillars/suggest', wrap(async (req, res) => {
 const jobs = new Map();
 
 app.post('/api/generate', wrap(async (req, res) => {
-  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick } = req.body;
+  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick, reelStyle } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   const state = stateStore.get();
   const profile = state.profile;
@@ -831,7 +831,7 @@ app.post('/api/generate', wrap(async (req, res) => {
       mediaSelection = sel;
     }
     const pkg = await generatePackage({
-      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick,
+      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick, reelStyle: reelStyle === 'music' ? 'music' : null,
       platformIds: platforms,
       onProgress: (p) => { job.progress = p; },
     });
@@ -1146,18 +1146,29 @@ app.delete('/api/packages/:id', (req, res) => {
 // ---- auto-produce (finished video rendering) -----------------------------
 
 app.post('/api/render', wrap(async (req, res) => {
-  const { packageId, platformId, voiceId, orientation, avatar, delivery } = req.body;
+  const { packageId, platformId, voiceId, orientation, avatar, delivery, music } = req.body;
   const pkg = packageStore.get().items.find((p) => p.id === packageId);
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   const fields = pkg.platforms?.[platformId]?.fields;
   if (!fields) return res.status(400).json({ error: 'that platform is not in this package' });
   const script = fields.script || fields.body || fields.post || '';
   const hookText = fields.hook || fields.hook_script || '';
+  // Music-led render: the on-screen text beats (one per line) are burned
+  // in over a silent cut of the requested length.
+  let musicOpts = null;
+  if (music) {
+    const raw = fields.overlay_text || fields.on_image_text || hookText;
+    const texts = String(Array.isArray(raw) ? raw.join('\n') : raw)
+      .split('\n').map((l) => l.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*|text(?:\s*overlay)?\s*[:\-]\s*)/i, '').trim()).filter(Boolean).slice(0, 12);
+    if (!texts.length) return res.status(400).json({ error: 'this reel has no on-screen text beats to burn in. Fill the On-screen text field first' });
+    musicOpts = { seconds: Math.min(60, Math.max(8, Math.round(Number(music.seconds) || 30))), texts };
+  }
   const renderId = startRender({
     pkg, profile: stateStore.get().profile, platformId, script, hookText, voiceId: voiceId || null,
     orientation: orientation || (platformId === 'youtube_long' ? 'landscape' : 'portrait'),
     avatar: avatar || null,
     delivery: delivery || null,
+    music: musicOpts,
   });
   res.json({ renderId });
 }));

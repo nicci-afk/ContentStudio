@@ -235,6 +235,7 @@ function mediaLinks(pkg, platformId, spec, renders) {
     if (done[0]) {
       links.push({ label: `⬇ ${slug}-${platformId}.mp4 (upload master)`, href: `/api/render/${done[0].id}/video`, download: `${slug}-${platformId}.mp4` });
       links.push({ label: '⬇ captions .srt', href: `/api/render/${done[0].id}/srt`, download: `${slug}.srt` });
+      if (pkg.reelStyle === 'music') links.push({ label: '♪ Music-led: after uploading, add a trending sound in the app (Audio, Trending)', href: null });
     } else {
       links.push({ label: 'No finished render yet: produce the video first', href: null });
     }

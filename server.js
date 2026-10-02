@@ -34,7 +34,7 @@ const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
 const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
 const { buildSiteSetupKit } = await import('./lib/sitekit.js');
-const { upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail } = await import('./lib/leads.js');
+const { upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
 const { loadManifest, findResource, resourcePath } = await import('./lib/resources.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
@@ -284,6 +284,7 @@ app.post('/api/leads/capture', wrap(async (req, res) => {
     if (out.error) return res.status(400).json({ error: out.error });
     const { lead } = out;
     const base = publicBase(req);
+    leadStore.update((d) => (d.settings?.publicBase === base ? d : { ...d, settings: { ...(d.settings || {}), publicBase: base } }));
     const downloadUrl = `${base}/r/${lead.token}/${resource.slug}.pdf`;
     res.json({ ok: true, eventId: lead.id, downloadUrl, message: 'Check your inbox. Your resource is on its way.' });
 
@@ -344,6 +345,47 @@ const unsub = (req, res, post) => {
 app.get('/unsubscribe/:token', (req, res) => unsub(req, res, false));
 app.post('/unsubscribe/:token', (req, res) => unsub(req, res, true));
 
+
+// ---- follow-up scheduler -------------------------------------------------
+// Runs every 15 minutes. Off by default per workspace (settings.sequenceEnabled).
+// Sends at most one email per eligible lead per tick, only in local business
+// hours, and stops for anyone who unsubscribed, applied, or was marked
+// applied, won or lost. A step that fails three times is skipped, never spammed.
+let sequenceRunning = false;
+async function runSequences(nowMs = Date.now()) {
+  if (sequenceRunning || (!process.env.SEQUENCE_IGNORE_WINDOW && !inSendWindow(nowMs))) return;
+  sequenceRunning = true;
+  try {
+    for (const w of listWorkspaces().items) {
+      await runWithWorkspace(w.id, async () => {
+        const settings = leadStore.get().settings || {};
+        const manifest = loadManifest(w.id);
+        if (!settings.sequenceEnabled || !manifest?.sequence?.length) return;
+        const base = process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || settings.publicBase;
+        if (!base) return;
+        for (const lead of leadStore.get().items.slice()) {
+          const due = nextSequenceStep(lead, manifest.sequence, nowMs);
+          if (!due.step) continue;
+          const patchSeq = (fn) => leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, sequence: fn(x.sequence || { sent: [], failures: {} }) } : x)) }));
+          try {
+            const r = await sendSequenceEmail({
+              lead, step: due.step, brand: manifest.legalName || '', person: manifest.person || '', address: manifest.senderAddress || '',
+              unsubUrl: `${base}/unsubscribe/${lead.token}`, replyTo: settings.notifyEmail,
+            });
+            if (r.status === 'sent') patchSeq((q) => ({ ...q, sent: [...(q.sent || []), { day: due.step.day, at: new Date().toISOString() }] }));
+          } catch (err) {
+            patchSeq((q) => ({ ...q, failures: { ...(q.failures || {}), [due.step.day]: ((q.failures || {})[due.step.day] || 0) + 1 }, lastError: String(err.message).slice(0, 160) }));
+          }
+        }
+      });
+    }
+  } finally { sequenceRunning = false; }
+}
+if (!process.env.DISABLE_SEQUENCES) {
+  setTimeout(() => runSequences().catch(() => {}), Number(process.env.SEQUENCE_FIRST_RUN_MS || 90 * 1000)).unref?.();
+  setInterval(() => runSequences().catch(() => {}), 15 * 60 * 1000).unref?.();
+}
+
 app.get('/api/leads', (req, res) => {
   const d = leadStore.get();
   const s = d.settings || {};
@@ -355,6 +397,7 @@ app.get('/api/leads', (req, res) => {
       notifyEmail: s.notifyEmail || process.env.LEAD_NOTIFY_EMAIL || '',
       keyMinted: !!s.ingestKey,
       captureId: s.captureId || '',
+      sequence: { enabled: s.sequenceEnabled === true, steps: ((loadManifest(listWorkspaces().activeId) || {}).sequence || []).map((x) => ({ day: x.day, subject: x.subject })) },
       resources: (loadManifest(listWorkspaces().activeId) || {}).resources || [],
       capi: { tokenSet: !!process.env.META_CAPI_TOKEN, pixelId: stateStore.get().profile?.business?.metaPixelId || '', testMode: !!process.env.META_TEST_EVENT_CODE },
     },
@@ -376,12 +419,35 @@ app.get('/api/leads/setup', (req, res) => {
 });
 
 app.put('/api/leads/settings', (req, res) => {
-  const to = String(req.body?.notifyEmail || '').trim().toLowerCase();
-  if (to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'enter a valid email address' });
   const d = leadStore.get();
-  leadStore.set({ ...d, settings: { ...(d.settings || {}), notifyEmail: to } });
+  const patch = {};
+  if (req.body?.notifyEmail !== undefined) {
+    const to = String(req.body.notifyEmail || '').trim().toLowerCase();
+    if (to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'enter a valid email address' });
+    patch.notifyEmail = to;
+  }
+  if (req.body?.sequenceEnabled !== undefined) patch.sequenceEnabled = req.body.sequenceEnabled === true;
+  leadStore.set({ ...d, settings: { ...(d.settings || {}), ...patch } });
   res.json({ ok: true });
 });
+
+// Send one follow-up email to the owner as a preview. Never touches a lead.
+app.post('/api/leads/sequence/test', wrap(async (req, res) => {
+  const manifest = loadManifest(listWorkspaces().activeId) || {};
+  const step = (manifest.sequence || []).find((x) => x.day === Number(req.body?.day));
+  const to = leadStore.get().settings?.notifyEmail;
+  if (!step) return res.status(400).json({ error: 'unknown step' });
+  if (!to) return res.status(400).json({ error: 'set your notification email first' });
+  const base = `${String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0]}://${req.get('host')}`;
+  try {
+    const r = await sendSequenceEmail({
+      lead: { firstName: 'Friend', email: to }, step, to, subjectPrefix: '[PREVIEW] ',
+      brand: manifest.legalName || '', person: manifest.person || '', address: manifest.senderAddress || '',
+      unsubUrl: `${base}/unsubscribe/preview`, replyTo: to,
+    });
+    res.json({ ok: true, ...r });
+  } catch (err) { res.status(502).json({ error: String(err.message).slice(0, 200) }); }
+}));
 
 app.patch('/api/leads/:id', (req, res) => {
   const d = leadStore.get();

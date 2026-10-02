@@ -56,6 +56,7 @@ export async function renderLeads(root) {
             el('div', { style: 'font-weight:600' }, l.stage === 'application' ? 'Applied' : 'Resource'),
             (l.resources || []).length ? el('div', { class: 'muted' }, l.resources.join(', ')) : null,
             l.source?.utm_source || l.howHeard ? el('div', { class: 'muted' }, l.source?.utm_source || l.howHeard) : null,
+            (l.sequence?.sent || []).length ? el('div', { class: 'muted' }, `${l.sequence.sent.length} follow-up${l.sequence.sent.length > 1 ? 's' : ''} sent`) : null,
             l.unsubscribed ? el('div', { class: 'muted' }, 'unsubscribed') : null),
           el('td', { style: 'padding:8px' }, l.yearsAdvisor),
           el('td', { style: 'padding:8px;max-width:220px' }, (l.niche || []).join(', ')),
@@ -97,7 +98,7 @@ export async function renderLeads(root) {
       el('button', {
         class: 'btn btn-primary',
         onclick: async () => {
-          try { await api.leadSettings(emailInput.value); toast('Saved'); } catch (err) { toast(err.message, 'err'); }
+          try { await api.leadSettings({ notifyEmail: emailInput.value }); toast('Saved'); } catch (err) { toast(err.message, 'err'); }
         },
       }, 'Save')),
     el('div', { style: 'margin-top:12px' },
@@ -128,6 +129,25 @@ export async function renderLeads(root) {
         : 'Not connected. When you add a Meta access token on the server, a Lead event will be sent for consenting applicants only. Until then nothing is sent to Meta.'),
     el('p', { class: 'muted' }, 'To make this work, add one optional checkbox question to your Form: "I agree to be contacted about The Conscious Creator and to my information being used to measure our advertising." Without it, no Meta event is ever sent.'));
 
+  const seq = data.settings.sequence || { enabled: false, steps: [] };
+  const seqToggle = el('input', { type: 'checkbox', checked: seq.enabled ? true : null, onchange: async (e) => {
+    const on = e.target.checked;
+    if (on && !confirm('Turn on follow-up emails? Everyone who signed up for a free resource will receive the emails below on this schedule, only between 9am and 6pm Central. Anyone who unsubscribes, applies, or is marked applied, won or lost stops receiving them.')) { e.target.checked = false; return; }
+    try { await api.leadSettings({ sequenceEnabled: on }); toast(on ? 'Follow-up emails are on' : 'Follow-up emails are off'); } catch (err) { e.target.checked = !on; toast(err.message, 'err'); }
+  } });
+  const sequenceCard = el('div', { class: 'card' },
+    el('h2', {}, 'Follow-up emails'),
+    el('p', { class: 'muted' }, 'A short series sent after someone downloads a free resource. It is OFF until you turn it on. Preview any email to your notification address first. Each email carries your address and a one click unsubscribe.'),
+    el('label', { style: 'display:flex;gap:10px;align-items:center;margin:8px 0 12px' }, seqToggle, el('strong', {}, 'Send follow-up emails')),
+    seq.steps.length ? el('table', { style: 'width:100%;border-collapse:collapse' }, el('tbody', {}, seq.steps.map((st) => el('tr', { style: 'border-top:1px solid var(--line, #2a2f3a)' },
+      el('td', { style: 'padding:8px;white-space:nowrap' }, `Day ${st.day}`),
+      el('td', { style: 'padding:8px' }, st.subject),
+      el('td', { style: 'padding:8px;text-align:right' }, el('button', { class: 'btn btn-ghost btn-xs', onclick: async (e) => {
+        e.target.disabled = true;
+        try { await api.leadSequenceTest(st.day); toast('Preview sent to your notification email'); } catch (err) { toast(err.message, 'err'); }
+        e.target.disabled = false;
+      } }, 'Send me a preview')))))) : el('p', { class: 'muted' }, 'No follow-up emails are set up for this business.'));
+
   view.append(
     el('div', { class: 'hero' }, el('h1', {}, 'Leads'), el('p', { class: 'sub' }, 'Applications and sign-ups for this business, scored so you can reach the strongest first.')),
     el('div', { class: 'row gap', style: 'flex-wrap:wrap' },
@@ -135,6 +155,7 @@ export async function renderLeads(root) {
     el('div', { class: 'card' },
       el('div', { class: 'row gap', style: 'margin-bottom:10px' }, filter('All tiers', 'tier', ['A', 'B', 'C']), filter('All statuses', 'status', data.statuses), filter('All sources', 'stage', ['resource', 'application'])),
       listHost),
+    sequenceCard,
     setup);
   root.replaceChildren(view);
   drawList();

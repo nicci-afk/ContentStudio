@@ -270,6 +270,17 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 .audio-player, .video-player { width: 100%; margin-top: 12px; border-radius: 10px; }
 .video-player { max-height: 480px; background: #000; }
 
+/* ---- content plan ---- */
+.plan-item { border-top: 1px solid var(--line); padding: 14px 0; display: flex; flex-direction: column; gap: 10px; }
+.plan-fields { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.plan-fields > .input { flex: 1 1 140px; min-width: 0; width: auto; }
+.plan-topic { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.plan-topic > .input { flex: 1 1 220px; min-width: 0; }
+.plan-status { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.plan-blocker { color: var(--danger); font-size: 12.5px; margin: 2px 0; }
+.plan-warning { color: var(--muted); font-size: 12.5px; margin: 2px 0; }
+.plan-queue-row { border-top: 1px solid var(--line); padding: 12px 0; }
+
 /* ---- mobile ---- */
 @media (max-width: 760px) {
   body { flex-direction: column; }
@@ -341,6 +352,9 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 
   /* Produce panel: every control full width, stacked */
   .produce-controls, .avatar-options { flex-direction: column; align-items: stretch; }
+
+  /* Content Plan: every control gets its own full row */
+  .plan-fields > .input, .plan-topic > .input { flex: 1 1 100%; }
 
   .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }

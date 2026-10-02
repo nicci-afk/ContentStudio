@@ -424,7 +424,7 @@ app.post('/api/pillars/suggest', wrap(async (req, res) => {
 const jobs = new Map();
 
 app.post('/api/generate', wrap(async (req, res) => {
-  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia } = req.body;
+  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   const state = stateStore.get();
   const profile = state.profile;
@@ -432,7 +432,7 @@ app.post('/api/generate', wrap(async (req, res) => {
   const series = (profile.series || []).find((s) => s.id === seriesId) || null;
 
   const jobId = uid();
-  const job = { id: jobId, status: 'running', progress: { done: 0, total: (platforms?.length || 14) + 1 }, package: null, error: null };
+  const job = { id: jobId, status: 'running', progress: { done: 0, total: (platforms?.length || 14) + (quick ? 0 : 1) }, package: null, error: null };
   jobs.set(jobId, job);
 
   (async () => {
@@ -440,12 +440,12 @@ app.post('/api/generate', wrap(async (req, res) => {
     let mediaSelection = null;
     if (!media.length && autoMedia) {
       job.progress = { platform: 'selecting media from your library', done: 0, total: job.progress.total };
-      const sel = await selectMedia({ profile, topic, angle, pillar, items: mediaStore.get().items });
+      const sel = await selectMedia({ profile, topic, angle, pillar, items: mediaStore.get().items, count: quick ? 3 : 8 });
       media = mediaStore.get().items.filter((m) => sel.ids.includes(m.id));
       mediaSelection = sel;
     }
     const pkg = await generatePackage({
-      profile, topic, angle, pillar, series, media, ctaUrl,
+      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick,
       platformIds: platforms,
       onProgress: (p) => { job.progress = p; },
     });
@@ -475,7 +475,7 @@ app.get('/api/packages', (req, res) => {
   res.json({
     items: packageStore.get().items.map((p) => ({
       id: p.id, topic: p.topic, createdAt: p.createdAt, mode: p.mode,
-      pillarId: p.pillarId, seriesId: p.seriesId,
+      pillarId: p.pillarId, seriesId: p.seriesId, kind: p.kind || 'package',
       platforms: Object.keys(p.platforms || {}),
       score: p.visibility?.score ?? null, grade: p.visibility?.grade ?? null,
     })),

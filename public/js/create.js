@@ -7,7 +7,8 @@ export function renderCreate(root, params = null) {
   const openPackageId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
-  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.map((p) => p.id)), mediaIds: new Set(), autoMedia: true };
+  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', quickFormats: new Set(['instagram_reel']) };
+  const QUICK = ['instagram_reel', 'instagram_post', 'facebook_reel', 'facebook'];
   let media = [];
 
   const formCard = el('div', { class: 'card form-card' });
@@ -15,8 +16,12 @@ export function renderCreate(root, params = null) {
   const detailWrap = el('div', {});
 
   const drawForm = () => {
+    const quick = form.mode === 'quick';
     formCard.replaceChildren(
-      el('h2', {}, 'New content package'),
+      el('div', { class: 'tab-row' },
+        el('button', { class: `tab ${quick ? 'active' : ''}`, onclick: () => { form.mode = 'quick'; drawForm(); } }, 'Quick post or reel'),
+        el('button', { class: `tab ${quick ? '' : 'active'}`, onclick: () => { form.mode = 'package'; drawForm(); } }, 'Full package')),
+      el('h2', {}, quick ? 'New post or reel' : 'New content package'),
       field('Topic', textInput({
         placeholder: 'e.g. Is an Antarctica cruise worth the money?',
         value: form.topic, oninput: (e) => { form.topic = e.target.value; },
@@ -41,17 +46,19 @@ export function renderCreate(root, params = null) {
           el('option', { value: '' }, '— standalone —'),
           (profile.series || []).map((s) => el('option', { value: s.id }, s.name))))),
       el('div', { class: 'field' },
-        el('span', { class: 'field-label' }, 'Platforms'),
-        el('div', { class: 'chip-row' }, appState.platforms.map((p) => {
+        el('span', { class: 'field-label' }, quick ? 'Formats (pick one or more)' : 'Platforms'),
+        el('div', { class: 'chip-row' }, appState.platforms.filter((p) => !quick || QUICK.includes(p.id)).map((p) => {
+          const set = quick ? form.quickFormats : form.platforms;
           const chip = el('button', {
-            class: `chip chip-toggle ${form.platforms.has(p.id) ? 'on' : ''}`,
+            class: `chip chip-toggle ${set.has(p.id) ? 'on' : ''}`,
             onclick: () => {
-              form.platforms.has(p.id) ? form.platforms.delete(p.id) : form.platforms.add(p.id);
+              set.has(p.id) ? set.delete(p.id) : set.add(p.id);
               chip.classList.toggle('on');
             },
           }, p.label);
           return chip;
-        }))),
+        })),
+        quick ? el('p', { class: 'muted', style: 'margin:8px 0 0' }, 'Writes only what you pick, with 1 to 3 library assets, and skips the AI-answer layer. You can add more surfaces to it later.') : null),
       el('div', { class: 'field' },
         el('span', { class: 'field-label' }, `Media (${media.length} in library)`),
         media.length
@@ -78,10 +85,10 @@ export function renderCreate(root, params = null) {
       el('button', {
         class: 'btn btn-primary btn-lg', onclick: async () => {
           if (!form.topic.trim()) return toast('Give the package a topic', 'err');
-          if (!form.platforms.size) return toast('Pick at least one platform', 'err');
+          if (!(quick ? form.quickFormats : form.platforms).size) return toast('Pick at least one platform', 'err');
           await runGeneration();
         },
-      }, '✦ Generate package'),
+      }, quick ? '✦ Generate' : '✦ Generate package'),
     );
   };
 
@@ -94,7 +101,8 @@ export function renderCreate(root, params = null) {
         topic: form.topic.trim(), angle: form.angle.trim() || null,
         ctaUrl: form.ctaUrl.trim() || null,
         pillarId: form.pillarId, seriesId: form.seriesId,
-        platforms: [...form.platforms],
+        platforms: [...(form.mode === 'quick' ? form.quickFormats : form.platforms)],
+        quick: form.mode === 'quick',
         mediaIds: form.autoMedia ? [] : [...form.mediaIds],
         autoMedia: form.autoMedia,
       });
@@ -103,7 +111,7 @@ export function renderCreate(root, params = null) {
         const job = await api.job(jobId);
         if (job.status === 'done') {
           progress.remove();
-          toast('Package ready');
+          toast(form.mode === 'quick' ? 'Ready' : 'Package ready');
           await drawList();
           openDetail(job.package.id);
           return;
@@ -122,11 +130,11 @@ export function renderCreate(root, params = null) {
     const { items } = await api.packages();
     listWrap.replaceChildren(
       el('div', { class: 'card' },
-        el('h2', {}, 'Packages'),
+        el('h2', {}, 'Posts and packages'),
         items.length
           ? el('div', { class: 'pkg-list' }, items.map((p) => el('button', { class: 'pkg-row', onclick: () => openDetail(p.id) },
               el('span', { class: 'pkg-topic' }, p.topic),
-              el('span', { class: 'muted' }, `${p.platforms.length} platforms · ${new Date(p.createdAt).toLocaleDateString()}${p.mode === 'template' ? ' · template mode' : ''}`),
+              el('span', { class: 'muted' }, `${p.kind === 'quick' ? 'quick · ' : ''}${p.platforms.length} platform${p.platforms.length === 1 ? '' : 's'} · ${new Date(p.createdAt).toLocaleDateString()}${p.mode === 'template' ? ' · template mode' : ''}`),
               scoreBadge(p.score, p.grade))))
           : emptyState('No packages yet', 'Generate your first package above — every platform, every asset, one topic.')));
   };
@@ -155,7 +163,7 @@ export function renderCreate(root, params = null) {
     el('div', { class: 'view-head' },
       el('div', {},
         el('h1', {}, 'Create'),
-        el('p', { class: 'sub' }, 'One topic in — a complete, platform-native, AI-visible content package out.'))),
+        el('p', { class: 'sub' }, 'A single reel or post, or a complete platform-native package, from one topic.'))),
     formCard, listWrap, detailWrap,
   );
 

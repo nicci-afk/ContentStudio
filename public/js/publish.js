@@ -14,7 +14,7 @@ const fieldText = (v) => (v == null ? '' : Array.isArray(v) ? v.join('\n') : Str
 // Day-one posting order: the long-form anchor first, the fast social
 // surfaces next, local and owned surfaces after.
 const POST_ORDER = ['youtube_long', 'linkedin', 'instagram_reel', 'youtube_shorts', 'tiktok',
-  'instagram_carousel', 'facebook', 'x_thread', 'pinterest', 'gbp', 'bing', 'alignable', 'newsletter', 'reddit'];
+  'instagram_carousel', 'instagram_post', 'facebook', 'facebook_reel', 'x_thread', 'pinterest', 'gbp', 'bing', 'alignable', 'newsletter', 'reddit'];
 
 const COMPOSERS = {
   youtube_long: 'https://studio.youtube.com',
@@ -22,7 +22,9 @@ const COMPOSERS = {
   instagram_reel: 'https://www.instagram.com/create/select/',
   instagram_carousel: 'https://www.instagram.com/create/select/',
   tiktok: 'https://www.tiktok.com/tiktokstudio/upload',
+  instagram_post: 'https://www.instagram.com/create/select/',
   facebook: 'https://www.facebook.com/',
+  facebook_reel: 'https://www.facebook.com/reels/create',
   x_thread: 'https://x.com/compose/post',
   // LinkedIn carries two assets: the long-form article has its own editor,
   // and the feed post is what drives traffic to it. One link each.
@@ -94,7 +96,7 @@ const PLACEMENT = {
 
 // Platforms that suppress reach when the post body carries an outbound
 // link, so the link belongs in the first comment instead.
-const LINK_IN_COMMENT = new Set(['linkedin', 'facebook']);
+const LINK_IN_COMMENT = new Set(['linkedin', 'facebook', 'facebook_reel']);
 
 // Markdown to HTML, so the clipboard can carry real formatting into an
 // editor that has its own styles. Deliberately small: the article grammar

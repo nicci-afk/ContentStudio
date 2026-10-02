@@ -1293,3 +1293,14 @@ Published to virginvoyagesexpert.com (Lovable project b6dc54a0-60b2-4e36-8ac4-d8
 - Data note: sailings.json has 173 itineraries (not 136); 13 route families share stops and nights under different titles, no merge was done.
 - Lovable lesson: plan_mode first, then relay approval; always review the agent's slug assignments against her real experience.
 - Still open: shore-things third-party prices and ratings freshness (a "prices can change" line was added, data untouched); travelghr.com /guide/the-conscious-creator contrast passages; "How did you hear about us?" question in the Conscious Creator Google Form (hers to add); R2 backup env vars.
+
+## Session 11 (2026-10-02): quick post / reel mode
+
+Create view has a "Quick post or reel" mode (default) beside "Full package".
+Quick packages (pkg.kind 'quick') write only the chosen formats, pick 1 to 3
+library assets, and skip the AI-answer layer (one fewer model call). New
+quickOnly platforms: instagram_post (single image/photo-dump post) and
+facebook_reel (video group, videoSpec 40s/85s, so Auto-Produce works); they
+are not preselected in Full package. Publish Run, approvals and "Add more
+surfaces" work on quick packages unchanged. Built on the dev branch, tested
+locally in template mode (no keys), NOT deployed.

@@ -348,6 +348,36 @@ export function renderLibrary(root) {
 
   const status = el('div', { class: 'import-status' });
   const summary = el('p', { class: 'sub lib-summary' });
+  // Files that predate cloud storage still sit on the server's disk; this
+  // offers to move them (copy, verify, then delete the local copy).
+  const moveNotice = el('div', {});
+  const drawMoveNotice = async () => {
+    try {
+      const m = await api.migrationStatus();
+      if (m.state.running) {
+        moveNotice.replaceChildren(el('div', { class: 'profile-box' }, spinner(`Moving files to cloud storage: ${m.state.done}/${m.state.total}…`)));
+        setTimeout(drawMoveNotice, 3000);
+        return;
+      }
+      if (!m.configured || !m.local.files) {
+        if (m.state.finishedAt && !m.state.dryRun && !m.state.errors.length && moveNotice.firstChild) toast('All files are now in cloud storage');
+        moveNotice.replaceChildren();
+        return;
+      }
+      const gb = (m.local.bytes / 1024 ** 3).toFixed(1);
+      moveNotice.replaceChildren(el('div', { class: 'profile-box' },
+        el('strong', {}, `${m.local.files.toLocaleString()} file${m.local.files === 1 ? '' : 's'} (${gb} GB) are still on the server's disk.`),
+        el('p', { class: 'muted', style: 'margin:6px 0 10px' }, 'Move them to cloud storage to free the disk. Each file is copied and checked before the local copy is removed, and everything keeps working while it runs.'),
+        m.state.errors?.length ? el('p', { class: 'muted' }, `Last run had ${m.state.errors.length} problem(s); they are retried on the next run.`) : null,
+        el('button', {
+          class: 'btn btn-primary btn-xs',
+          onclick: async () => {
+            if (!window.confirm(`Move ${m.local.files.toLocaleString()} file(s), ${gb} GB, to cloud storage now? Avoid starting a video render until it finishes.`)) return;
+            try { await api.startMigration(); drawMoveNotice(); } catch (err) { toast(err.message, 'err'); }
+          },
+        }, 'Move to cloud storage')));
+    } catch { /* optional panel */ }
+  };
   const body = el('div', {});
   const tabs = el('div', { class: 'tab-row' });
 
@@ -571,11 +601,12 @@ export function renderLibrary(root) {
       el('div', { class: 'row gap' },
         el('label', { class: 'btn btn-primary', for: 'media-picker' }, '⬆ Import from device'),
         el('button', { class: 'btn btn-ghost', onclick: analyzeAll }, aiReady ? '✦ Analyze all' : '✦ Analyze all (needs Claude key)'))),
-    fileInput, status, tabs, body,
+    moveNotice, fileInput, status, tabs, body,
   );
 
   drawTabs();
   drawBody();
+  drawMoveNotice();
   loadFirstPage().then(pollAnalysis);
   root.replaceChildren(container);
 }

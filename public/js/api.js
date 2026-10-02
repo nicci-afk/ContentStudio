@@ -42,6 +42,8 @@ export const api = {
     return get(`/api/media${q.toString() ? `?${q}` : ''}`);
   },
   matchMedia: (files) => send('POST', '/api/media/match', { files }),
+  migrationStatus: () => get('/api/media/migrate'),
+  startMigration: () => send('POST', '/api/media/migrate', {}),
   mediaAnalysis: () => get('/api/media/analysis'),
   startAnalysis: (body = {}) => send('POST', '/api/media/analysis', body),
   moderation: () => get('/api/moderation'),

@@ -1,0 +1,59 @@
+@import url('fonts.css');
+@page { size: Letter; margin: 0; }
+:root { --paper:#f8f5f0; --ink:#0d1216; --soft:#464e55; --lagoon:#00999f; --deep:#00566b; --cream:#ebe6de; --rule:#d2cdc5; }
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; background:var(--paper); color:var(--ink); font-family:'Work Sans', system-ui, sans-serif; font-size:11.5pt; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.page { width:8.5in; height:11in; padding:0.85in 0.9in 0.95in; position:relative; page-break-after:always; overflow:hidden; background:var(--paper); }
+.page:last-child { page-break-after:auto; }
+.eyebrow { font-size:8.5pt; letter-spacing:0.22em; text-transform:uppercase; color:var(--deep); font-weight:500; margin:0 0 14px; }
+h1,h2,h3 { font-family:'Instrument Serif', Georgia, serif; font-weight:400; margin:0; letter-spacing:-0.01em; }
+h1 { font-size:46pt; line-height:1.02; }
+h2 { font-size:25pt; line-height:1.1; margin-bottom:10px; }
+h3 { font-size:15pt; margin:0 0 4px; }
+p { margin:0 0 10px; }
+.sub { font-family:'Instrument Serif', Georgia, serif; font-size:19pt; line-height:1.25; color:var(--soft); max-width:5.6in; }
+.rule { height:1px; background:var(--rule); margin:18px 0; }
+.foot { position:absolute; left:0.9in; right:0.9in; bottom:0.45in; display:flex; justify-content:space-between; font-size:8pt; color:var(--soft); letter-spacing:0.08em; text-transform:uppercase; border-top:1px solid var(--rule); padding-top:9px; }
+.cover { background:var(--ink); color:var(--paper); display:flex; flex-direction:column; justify-content:space-between; }
+.cover .eyebrow { color:var(--lagoon); }
+.cover .sub { color:#c9cfd3; }
+.cover .byline { font-size:9.5pt; letter-spacing:0.14em; text-transform:uppercase; color:#c9cfd3; }
+.cover .accent { width:56px; height:3px; background:var(--lagoon); margin:22px 0; }
+.quote { font-family:'Instrument Serif', Georgia, serif; font-size:21pt; line-height:1.25; color:var(--deep); border-left:3px solid var(--lagoon); padding:2px 0 2px 18px; margin:18px 0; }
+.step { margin:0 0 20px; }
+.stepno { display:inline-block; font-size:8.5pt; letter-spacing:0.2em; text-transform:uppercase; color:var(--lagoon); font-weight:600; margin-bottom:2px; }
+.prompt { color:var(--soft); margin-bottom:8px; }
+.label { font-size:8.5pt; letter-spacing:0.12em; text-transform:uppercase; color:var(--soft); margin:10px 0 0; }
+.line { border-bottom:1px solid var(--rule); height:27px; }
+.box { border:1px solid var(--rule); background:#fff; border-radius:3px; }
+table { width:100%; border-collapse:collapse; }
+th { text-align:left; font-size:8.5pt; letter-spacing:0.12em; text-transform:uppercase; color:var(--soft); font-weight:500; padding:7px 8px; border-bottom:1px solid var(--ink); }
+td { vertical-align:top; padding:9px 8px; border-bottom:1px solid var(--rule); }
+.check { display:flex; gap:10px; align-items:flex-start; margin:6px 0; }
+.check i { width:13px; height:13px; border:1.4px solid var(--deep); border-radius:2px; flex:none; margin-top:4px; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+.card { background:var(--cream); border-radius:4px; padding:14px 16px; }
+.card h3 { font-size:13.5pt; }
+.small { font-size:10pt; color:var(--soft); }
+ul.tight { margin:0 0 10px; padding-left:18px; } ul.tight li { margin:3px 0; }
+.cta { background:var(--deep); color:var(--paper); border-radius:4px; padding:16px 20px; margin-top:18px; }
+.cta p { margin:0; } .cta strong { font-family:'Instrument Serif', Georgia, serif; font-weight:400; font-size:16pt; display:block; margin-bottom:4px; }
+.days .day { display:grid; grid-template-columns:70px 1fr; gap:12px; padding:10px 0; border-bottom:1px solid var(--rule); }
+.days .d { font-family:'Instrument Serif', Georgia, serif; font-size:15pt; color:var(--deep); }
+.compact { padding-top:0.7in; }
+.compact .line { height:23px; }
+.compact .step { margin:0 0 13px; }
+.compact td { padding:6px 8px; }
+.compact h2 { font-size:22pt; margin-bottom:6px; }
+.compact .cta { margin-top:12px; padding:13px 18px; }
+.compact .cta strong { font-size:14.5pt; }
+.compact .card { padding:11px 14px; }
+.compact .rule { margin:12px 0; }
+.tight .line { height:20px; }
+.tight .step { margin:0 0 9px; }
+.tight td { padding:4px 8px; }
+.tight .label { margin:6px 0 0; }
+.tight .prompt { margin-bottom:4px; }
+.tight h2 { margin-bottom:4px; }
+.tight .cta { margin-top:10px; padding:11px 16px; }
+.tight .check { margin:3px 0; }

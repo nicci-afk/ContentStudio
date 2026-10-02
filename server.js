@@ -17,7 +17,8 @@ if (fs.existsSync(envFile)) {
 
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace,
-  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary } =
+  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary,
+  leadStore, ledgerStore, findWorkspaceByLeadKey, findWorkspaceByCaptureId, findLeadByToken } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -33,6 +34,8 @@ const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
 const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
 const { buildSiteSetupKit } = await import('./lib/sitekit.js');
+const { EVENT_SIZES, EVENT_TIMINGS, leadChannel, upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
+const { loadManifest, findResource, resourcePath } = await import('./lib/resources.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
 
@@ -171,6 +174,389 @@ app.get('/api/site-setup-kit', (req, res) => {
   }
   res.json({ markdown: buildSiteSetupKit(state.profile, biz.indexNowKey), indexNowKey: biz.indexNowKey });
 });
+
+// ---- leads ---------------------------------------------------------------
+// The Google Form bridge (Apps Script) posts each application here with a
+// per-workspace secret. Auth is the key, not a session, so this one path is
+// public in lib/auth.js. Rate limited per IP; unknown keys are counted harder.
+
+const leadHits = new Map();
+const leadFails = new Map();
+const hit = (map, key, max, windowMs) => {
+  const now = Date.now();
+  const e = map.get(key);
+  if (!e || e.reset < now) { map.set(key, { n: 1, reset: now + windowMs }); return false; }
+  e.n += 1;
+  return e.n > max;
+};
+const clientIp = (req) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+
+const record = (id, patch) => leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+const stamp = (o) => ({ ...o, at: new Date().toISOString() });
+const errStatus = (err) => ({ status: 'error', reason: String(err.message).slice(0, 200) });
+
+// Shared after-reply work for a new lead. Runs inside the workspace context.
+async function leadSideEffects(lead, { capiEvent, capiEventId } = {}) {
+  const biz = stateStore.get().profile?.business || {};
+  const brand = biz.name || 'your business';
+  const settings = leadStore.get().settings || {};
+  try {
+    record(lead.id, { notify: stamp(await notifyLead(lead, { to: settings.notifyEmail || process.env.LEAD_NOTIFY_EMAIL, brand })) });
+  } catch (err) { record(lead.id, { notify: stamp(errStatus(err)) }); }
+  try {
+    record(lead.id, { capi: stamp(await sendLeadToMeta(lead, { pixelId: biz.metaPixelId, site: biz.links?.website, brand, eventName: capiEvent, eventId: capiEventId })) });
+  } catch (err) { record(lead.id, { capi: stamp(errStatus(err)) }); }
+}
+
+app.post('/api/leads/ingest', wrap(async (req, res) => {
+  const ip = clientIp(req);
+  if (hit(leadHits, ip, 120, 10 * 60 * 1000)) return res.status(429).json({ error: 'too many requests' });
+  if (JSON.stringify(req.body || {}).length > 20000) return res.status(413).json({ error: 'payload too large' });
+  const wsId = findWorkspaceByLeadKey(req.get('x-ingest-key'));
+  if (!wsId) {
+    if (hit(leadFails, ip, 20, 15 * 60 * 1000)) return res.status(429).json({ error: 'too many requests' });
+    return res.status(401).json({ error: 'invalid key' });
+  }
+  await runWithWorkspace(wsId, async () => {
+    const out = upsertLead(leadStore, req.body, { stage: 'application' });
+    if (out.error) return res.status(400).json({ error: out.error });
+    const { lead, firstApplication } = out;
+    res.json({ ok: true, id: lead.id, tier: lead.score.tier, duplicate: out.duplicate });
+    // Alert and Meta event once per person for the application, even when they
+    // first arrived by downloading a resource.
+    if (firstApplication) await leadSideEffects(lead, { capiEvent: 'SubmitApplication', capiEventId: `${lead.id}-app` });
+  });
+}));
+
+// ---- public sign-up for a free resource (landing page form) --------------
+// The page holds only a non-secret capture id. Safeguards: the request must
+// come from the workspace's own site origin, a honeypot field, per-IP and
+// global rate limits, one delivery email per address per resource per day,
+// and an explicit email consent that is recorded with its wording and time.
+
+const captureHits = new Map();
+const captureGlobal = { n: 0, reset: 0 };
+const originsFor = (wsId) => {
+  const site = (readWorkspace(wsId)?.state?.profile?.business?.links?.website || '').trim();
+  let host = '';
+  try { host = new URL(site).hostname.replace(/^www\./, ''); } catch { /* none */ }
+  const extra = (process.env.LEAD_ALLOWED_ORIGINS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return host ? [`https://${host}`, `https://www.${host}`, ...extra] : extra;
+};
+const corsHeaders = (res, origin) => {
+  res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Max-Age': '86400' });
+};
+const publicBase = (req) => `${String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0]}://${req.get('host')}`;
+const CONSENT_TEXT_V1 = 'Email me this resource and occasional notes about The Conscious Creator. I can unsubscribe at any time.';
+// Per-brand email context from the workspace manifest and profile (host shown in the footer, accent color).
+const siteHostOf = (manifest, biz) => manifest?.siteHost || (() => { try { return new URL(biz?.links?.website || '').hostname.replace(/^www\./, ''); } catch { return ''; } })();
+const mailCtx = (manifest) => ({ siteHost: siteHostOf(manifest, stateStore.get().profile?.business), accent: manifest?.accent });
+
+// Preflight: the page posts to /api/leads/capture?id=<captureId> so the browser's
+// OPTIONS request already names the workspace whose site origin may call it.
+app.options('/api/leads/capture', (req, res) => {
+  const origin = req.get('origin') || '';
+  const wsId = findWorkspaceByCaptureId(req.query.id);
+  if (wsId && originsFor(wsId).includes(origin)) corsHeaders(res, origin);
+  res.status(204).end();
+});
+
+// Optional self-reported source (a fixed list, so free text never lands here).
+const HOW_HEARD = ['An AI assistant (ChatGPT, Claude, Perplexity, or similar)', 'Google or Bing search', 'Instagram or Facebook', 'LinkedIn', 'YouTube', 'A friend or colleague', 'Podcast or event', 'Email', 'Somewhere else'];
+app.post('/api/leads/capture', wrap(async (req, res) => {
+  const ip = clientIp(req);
+  const now = Date.now();
+  if (captureGlobal.reset < now) { captureGlobal.n = 0; captureGlobal.reset = now + 60 * 60 * 1000; }
+  if (++captureGlobal.n > 200 || hit(captureHits, ip, 12, 60 * 60 * 1000)) return res.status(429).json({ error: 'too many requests, please try again later' });
+  const b = req.body || {};
+  const wsId = findWorkspaceByCaptureId(b.captureId);
+  if (!wsId) return res.status(404).json({ error: 'unknown form' });
+  const origin = req.get('origin') || '';
+  if (!originsFor(wsId).includes(origin)) return res.status(403).json({ error: 'origin not allowed' });
+  corsHeaders(res, origin);
+  if (String(b.hp || '').trim()) return res.json({ ok: true }); // honeypot: pretend success, store nothing
+  if (b.emailConsent !== true) return res.status(400).json({ error: 'please tick the box to receive your resource by email' });
+  const resource = findResource(wsId, String(b.resource || ''));
+  if (!resource) return res.status(400).json({ error: 'unknown resource' });
+  await runWithWorkspace(wsId, async () => {
+    const tags = {
+      utm_source: b.utm_source, utm_medium: b.utm_medium, utm_campaign: b.utm_campaign, utm_content: b.utm_content, fbclid: b.fbclid, page: b.page,
+      referrer: String(b.referrer || '').toLowerCase().replace(/[^a-z0-9.\-]/g, ''),
+    };
+    const out = upsertLead(leadStore, {
+      firstName: b.firstName, email: b.email, yearsAdvisor: b.yearsAdvisor, agency: b.agency,
+      howHeard: HOW_HEARD.includes(b.howHeard) ? b.howHeard : '',
+      role: b.role, eventSize: EVENT_SIZES.includes(b.eventSize) ? b.eventSize : '', eventTiming: EVENT_TIMINGS.includes(b.eventTiming) ? b.eventTiming : '',
+      consent: b.adConsent === true, sourceTags: tags, fbc: b.fbc, fbp: b.fbp,
+    }, { stage: 'resource', resource: resource.slug, optIn: { at: new Date().toISOString(), text: (loadManifest(wsId) || {}).consentText || CONSENT_TEXT_V1, page: String(b.page || '').slice(0, 300) } });
+    if (out.error) return res.status(400).json({ error: out.error });
+    const { lead } = out;
+    const base = publicBase(req);
+    leadStore.update((d) => (d.settings?.publicBase === base ? d : { ...d, settings: { ...(d.settings || {}), publicBase: base } }));
+    const downloadUrl = `${base}/r/${lead.token}/${resource.slug}.pdf`;
+    res.json({ ok: true, eventId: lead.id, downloadUrl, message: 'Check your inbox. Your resource is on its way.' });
+
+    const manifest = loadManifest(wsId) || {};
+    const biz = stateStore.get().profile?.business || {};
+    const settings = leadStore.get().settings || {};
+    // One delivery email per address per resource per day (blocks email bombing).
+    const recent = (lead.deliveries || []).find((d) => d.slug === resource.slug && Date.now() - Date.parse(d.at) < 24 * 3600 * 1000);
+    if (!recent && !lead.unsubscribed) {
+      try {
+        const r = await sendResourceEmail({
+          lead, resource, brand: manifest.legalName || biz.name || 'The Conscious Creator', person: manifest.person || biz.person?.name || '', address: manifest.senderAddress || '',
+          downloadUrl, unsubUrl: `${base}/unsubscribe/${lead.token}`,
+          applyUrl: manifest.applyUrl || '', lookInsideUrl: manifest.lookInsideUrl || '', replyTo: settings.notifyEmail, ...mailCtx(manifest),
+        });
+        leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, delivery: stamp(r), deliveries: [...(x.deliveries || []), { slug: resource.slug, at: new Date().toISOString() }] } : x)) }));
+      } catch (err) { record(lead.id, { delivery: stamp(errStatus(err)) }); }
+    }
+    if (out.newResource) {
+      // Alert and Meta Lead event once per person for a first resource.
+      const firstResource = !out.duplicate;
+      if (firstResource || lead.capi?.status !== 'sent') await leadSideEffects(lead, { capiEvent: 'Lead', capiEventId: lead.id });
+    }
+  });
+}));
+
+// Tokenized download of a resource PDF. The token is per lead and unguessable.
+app.get('/r/:token/:file', (req, res) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  const hit1 = findLeadByToken(req.params.token);
+  if (!hit1) return res.status(404).type('text').send('This link is not valid.');
+  const slug = req.params.file.replace(/\.pdf$/i, '');
+  const resource = findResource(hit1.wsId, slug);
+  const file = resource && resourcePath(hit1.wsId, resource);
+  if (!file) return res.status(404).type('text').send('This resource is not available.');
+  runWithWorkspace(hit1.wsId, () => {
+    leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === hit1.lead.id ? { ...x, downloads: (x.downloads || 0) + 1, lastDownloadAt: new Date().toISOString() } : x)) }));
+  });
+  res.set('Cache-Control', 'private, no-store');
+  res.type('application/pdf');
+  res.set('Content-Disposition', `inline; filename="${slug}.pdf"`);
+  res.sendFile(file);
+});
+
+// One-click unsubscribe (also the List-Unsubscribe target).
+const unsub = (req, res, post) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  const found = findLeadByToken(req.params.token);
+  if (found) {
+    runWithWorkspace(found.wsId, () => {
+      record(found.lead.id, { unsubscribed: true, unsubscribedAt: new Date().toISOString() });
+    });
+  }
+  if (post) return res.status(200).end();
+  const brand = found ? (readWorkspace(found.wsId)?.state?.profile?.business?.name || 'this list') : 'this list';
+  res.type('html').send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed</title><body style="font-family:Georgia,serif;max-width:480px;margin:12vh auto;padding:0 20px;color:#0d1216"><h1 style="font-weight:400">You are unsubscribed.</h1><p>${found ? `You will not receive further emails from ${brand.replace(/[<>&"]/g, '')}.` : 'This link is no longer active, so there is nothing more to do.'}</p></body>`);
+};
+app.get('/unsubscribe/:token', (req, res) => unsub(req, res, false));
+app.post('/unsubscribe/:token', (req, res) => unsub(req, res, true));
+
+
+// ---- follow-up scheduler -------------------------------------------------
+// Runs every 15 minutes. Off by default per workspace (settings.sequenceEnabled).
+// Sends at most one email per eligible lead per tick, only in local business
+// hours, and stops for anyone who unsubscribed, applied, or was marked
+// applied, won or lost. A step that fails three times is skipped, never spammed.
+let sequenceRunning = false;
+async function runSequences(nowMs = Date.now()) {
+  if (sequenceRunning || (!process.env.SEQUENCE_IGNORE_WINDOW && !inSendWindow(nowMs))) return;
+  sequenceRunning = true;
+  try {
+    for (const w of listWorkspaces().items) {
+      await runWithWorkspace(w.id, async () => {
+        const settings = leadStore.get().settings || {};
+        const manifest = loadManifest(w.id);
+        if (!settings.sequenceEnabled || !manifest?.sequence?.length) return;
+        const base = process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || settings.publicBase;
+        if (!base) return;
+        for (const lead of leadStore.get().items.slice()) {
+          const due = nextSequenceStep(lead, manifest.sequence, nowMs);
+          if (!due.step) continue;
+          const patchSeq = (fn) => leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, sequence: fn(x.sequence || { sent: [], failures: {} }) } : x)) }));
+          try {
+            const r = await sendSequenceEmail({
+              lead, step: due.step, brand: manifest.legalName || '', person: manifest.person || '', address: manifest.senderAddress || '',
+              unsubUrl: `${base}/unsubscribe/${lead.token}`, replyTo: settings.notifyEmail, ...mailCtx(manifest),
+            });
+            if (r.status === 'sent') patchSeq((q) => ({ ...q, sent: [...(q.sent || []), { day: due.step.day, at: new Date().toISOString() }] }));
+          } catch (err) {
+            patchSeq((q) => ({ ...q, failures: { ...(q.failures || {}), [due.step.day]: ((q.failures || {})[due.step.day] || 0) + 1 }, lastError: String(err.message).slice(0, 160) }));
+          }
+        }
+      });
+    }
+  } finally { sequenceRunning = false; }
+}
+if (!process.env.DISABLE_SEQUENCES) {
+  setTimeout(() => runSequences().catch(() => {}), Number(process.env.SEQUENCE_FIRST_RUN_MS || 90 * 1000)).unref?.();
+  setInterval(() => runSequences().catch(() => {}), 15 * 60 * 1000).unref?.();
+}
+
+app.get('/api/leads', (req, res) => {
+  const d = leadStore.get();
+  const s = d.settings || {};
+  res.json({
+    items: d.items.map((l) => ({ ...l, channel: leadChannel(l) })),
+    summary: leadSummary(d.items),
+    statuses: leadStatuses(),
+    settings: {
+      notifyEmail: s.notifyEmail || process.env.LEAD_NOTIFY_EMAIL || '',
+      keyMinted: !!s.ingestKey,
+      captureId: s.captureId || '',
+      sequence: { enabled: s.sequenceEnabled === true, steps: ((loadManifest(listWorkspaces().activeId) || {}).sequence || []).map((x) => ({ day: x.day, subject: x.subject })) },
+      resources: (loadManifest(listWorkspaces().activeId) || {}).resources || [],
+      capi: { tokenSet: !!process.env.META_CAPI_TOKEN, pixelId: stateStore.get().profile?.business?.metaPixelId || '', testMode: !!process.env.META_TEST_EVENT_CODE },
+    },
+  });
+});
+
+// Mints the ingest key on first use and returns the ready-to-paste script.
+app.get('/api/leads/setup', (req, res) => {
+  const d = leadStore.get();
+  const settings = { ...(d.settings || {}) };
+  if (!settings.ingestKey || !settings.captureId) {
+    settings.ingestKey = settings.ingestKey || newLeadKey();
+    settings.captureId = settings.captureId || newLeadKey().slice(0, 20);
+    leadStore.set({ ...d, settings });
+  }
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0];
+  const endpoint = `${proto}://${req.get('host')}/api/leads/ingest`;
+  res.json({ endpoint, ingestKey: settings.ingestKey, captureId: settings.captureId, captureEndpoint: `${proto}://${req.get('host')}/api/leads/capture`, appsScript: buildAppsScript({ endpoint, key: settings.ingestKey }) });
+});
+
+app.put('/api/leads/settings', (req, res) => {
+  const d = leadStore.get();
+  const patch = {};
+  if (req.body?.notifyEmail !== undefined) {
+    const to = String(req.body.notifyEmail || '').trim().toLowerCase();
+    if (to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'enter a valid email address' });
+    patch.notifyEmail = to;
+  }
+  if (req.body?.sequenceEnabled !== undefined) patch.sequenceEnabled = req.body.sequenceEnabled === true;
+  leadStore.set({ ...d, settings: { ...(d.settings || {}), ...patch } });
+  res.json({ ok: true });
+});
+
+// Send one follow-up email to the owner as a preview. Never touches a lead.
+app.post('/api/leads/sequence/test', wrap(async (req, res) => {
+  const manifest = loadManifest(listWorkspaces().activeId) || {};
+  const step = (manifest.sequence || []).find((x) => x.day === Number(req.body?.day));
+  const to = leadStore.get().settings?.notifyEmail;
+  if (!step) return res.status(400).json({ error: 'unknown step' });
+  if (!to) return res.status(400).json({ error: 'set your notification email first' });
+  const base = `${String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0]}://${req.get('host')}`;
+  try {
+    const r = await sendSequenceEmail({
+      lead: { firstName: 'Friend', email: to }, step, to, subjectPrefix: '[PREVIEW] ',
+      brand: manifest.legalName || '', person: manifest.person || '', address: manifest.senderAddress || '',
+      unsubUrl: `${base}/unsubscribe/preview`, replyTo: to, ...mailCtx(manifest),
+    });
+    res.json({ ok: true, ...r });
+  } catch (err) { res.status(502).json({ error: String(err.message).slice(0, 200) }); }
+}));
+
+app.patch('/api/leads/:id', (req, res) => {
+  const d = leadStore.get();
+  if (!d.items.some((x) => x.id === req.params.id)) return res.status(404).json({ error: 'not found' });
+  const patch = {};
+  if (req.body?.status !== undefined) {
+    if (!leadStatuses().includes(req.body.status)) return res.status(400).json({ error: 'unknown status' });
+    patch.status = req.body.status;
+  }
+  if (req.body?.notes !== undefined) patch.notes = String(req.body.notes).slice(0, 2000);
+  leadStore.set({ ...d, items: d.items.map((x) => (x.id === req.params.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x)) });
+  res.json({ ok: true });
+});
+
+// Deletion on request (a lead's right to be forgotten).
+app.delete('/api/leads/:id', (req, res) => {
+  const d = leadStore.get();
+  leadStore.set({ ...d, items: d.items.filter((x) => x.id !== req.params.id) });
+  res.json({ ok: true });
+});
+
+// ---- Visibility Ledger ----------------------------------------------------
+// Fixed buyer questions per workspace, checked monthly (and on demand) to see
+// whether AI answers name the brand and cite its own pages. Answers from other
+// assistants are pasted in by hand. See lib/ledger.js.
+const { ENGINES, MONTH_MS, newQuestions, summarize, runClaudeCheck, recordManual, suggestQuestions } = await import('./lib/ledger.js');
+const ledgerRunning = new Set();
+const ledgerView = (wsId) => {
+  const data = ledgerStore.get();
+  const sum = summarize(data);
+  return {
+    settings: { enabled: !!data.settings?.enabled, terms: data.settings?.terms || [], domains: data.settings?.domains || [], lastRunAt: data.settings?.lastRunAt || null },
+    questions: sum.questions, byEngine: sum.byEngine, history: sum.history.slice(0, 24),
+    engines: ENGINES, running: ledgerRunning.has(wsId) || sum.runs.some((r) => r.status === 'running'),
+    aiConfigured: !!process.env.ANTHROPIC_API_KEY,
+  };
+};
+const startLedgerRun = (wsId) => {
+  ledgerRunning.add(wsId);
+  runWithWorkspace(wsId, () => runClaudeCheck(ledgerStore, stateStore.get().profile))
+    .catch((err) => console.error('ledger run failed:', err.message))
+    .finally(() => ledgerRunning.delete(wsId));
+};
+app.get('/api/ledger', (req, res) => res.json(ledgerView(listWorkspaces().activeId)));
+app.put('/api/ledger/questions', (req, res) => {
+  const list = Array.isArray(req.body?.questions) ? req.body.questions : [];
+  ledgerStore.update((d) => ({ ...d, questions: newQuestions(d.questions || [], list) }));
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+app.put('/api/ledger/settings', (req, res) => {
+  const b = req.body || {};
+  const list = (v) => (Array.isArray(v) ? v : String(v || '').split(/[\n,]+/)).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 20);
+  ledgerStore.update((d) => ({ ...d, settings: {
+    ...(d.settings || {}),
+    ...(b.enabled !== undefined ? { enabled: b.enabled === true } : {}),
+    ...(b.terms !== undefined ? { terms: list(b.terms) } : {}),
+    ...(b.domains !== undefined ? { domains: list(b.domains) } : {}),
+  } }));
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+app.post('/api/ledger/suggest', wrap(async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  res.json({ questions: await suggestQuestions(stateStore.get().profile) });
+}));
+app.post('/api/ledger/run', (req, res) => {
+  const wsId = listWorkspaces().activeId;
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (ledgerRunning.has(wsId)) return res.status(409).json({ error: 'a check is already running' });
+  if (!ledgerStore.get().questions?.length) return res.status(400).json({ error: 'add at least one question first' });
+  startLedgerRun(wsId);
+  res.status(202).json({ started: true });
+});
+app.post('/api/ledger/manual', (req, res) => {
+  try { recordManual(ledgerStore, stateStore.get().profile, req.body || {}); } catch (err) { return res.status(400).json({ error: err.message }); }
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+app.delete('/api/ledger/runs/:id', (req, res) => {
+  ledgerStore.update((d) => ({ ...d, runs: (d.runs || []).filter((r) => r.id !== req.params.id) }));
+  res.json(ledgerView(listWorkspaces().activeId));
+});
+// Monthly auto-check: only for workspaces that switched it on and have questions.
+let ledgerSweeping = false;
+async function sweepLedgers(nowMs = Date.now()) {
+  if (ledgerSweeping || !process.env.ANTHROPIC_API_KEY) return;
+  ledgerSweeping = true;
+  try {
+    for (const w of listWorkspaces().items) {
+      if (ledgerRunning.has(w.id)) continue;
+      const due = await runWithWorkspace(w.id, async () => {
+        const d = ledgerStore.get();
+        const last = Date.parse(d.settings?.lastRunAt || '') || 0;
+        return d.settings?.enabled && d.questions?.length && nowMs - last >= MONTH_MS;
+      });
+      if (due) { startLedgerRun(w.id); while (ledgerRunning.has(w.id)) await new Promise((r) => setTimeout(r, 5000)); }
+    }
+  } finally { ledgerSweeping = false; }
+}
+if (!process.env.DISABLE_LEDGER) {
+  setTimeout(() => sweepLedgers().catch(() => {}), Number(process.env.LEDGER_FIRST_RUN_MS || 5 * 60 * 1000)).unref?.();
+  setInterval(() => sweepLedgers().catch(() => {}), 6 * 3600 * 1000).unref?.();
+}
 
 // Token and prompt-cache ledger for this server process (resets on restart).
 app.get('/api/usage', (req, res) => res.json(usageReport()));

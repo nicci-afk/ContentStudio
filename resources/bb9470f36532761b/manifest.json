@@ -1,0 +1,74 @@
+{
+  "person": "Nicci Grotefendt",
+  "legalName": "Travel GHR",
+  "senderAddress": "1012 North Main Street, Edwardsville, IL 62025",
+  "siteHost": "travelghr.com",
+  "accent": "#1b2f4d",
+  "consentText": "Email me this checklist and occasional notes from Travel GHR about corporate event travel. I can unsubscribe at any time.",
+  "applyUrl": "https://travelghr.com/contact",
+  "lookInsideUrl": "https://travelghr.com/services/corporate-travel",
+  "resources": [
+    {
+      "slug": "corporate-event-checklist",
+      "title": "The Corporate Event Travel Checklist",
+      "file": "corporate-event-checklist.pdf",
+      "subject": "Your Corporate Event Travel Checklist",
+      "buttonLabel": "Download the checklist",
+      "emailIntro": "Here is the Corporate Event Travel Checklist you asked for. It follows the work in the order it usually unfolds, from the first list of attendees to the thank-you notes afterward, in eight sections.",
+      "emailNote": "Start with section 1, the attendee list, because everything else is built on it. If a question comes up as you plan, reply and tell me where you are.",
+      "ps": "If you would like to talk an event through, a discovery call is a relaxed place to start: https://travelghr.com/contact"
+    }
+  ],
+  "sequence": [
+    {
+      "day": 2,
+      "subject": "Packing lists and portable batteries",
+      "paragraphs": [
+        "One detail I include for every attendee at an event is a packing list built from three things: their itinerary, their meetings, and the weather where they are going.",
+        "It is a small thing, and it is often the one people mention afterward. A reminder about a portable battery before a long education day. A note about what to wear to the evening plan. Practical tips that mean no one has to ask.",
+        "If you are planning an event now, section 6 of the checklist covers this. I would love to hear what you would add to your own list. Reply and tell me."
+      ]
+    },
+    {
+      "day": 5,
+      "subject": "Three questions to ask a venue before you sign",
+      "paragraphs": [
+        "Before a contract feels settled, a few questions can make the rest of the planning calmer. Here are three from section 3 of the checklist:",
+        {
+          "ol": [
+            "What is the cutoff date for the room block, and what happens to rooms not reserved by then?",
+            "When are final counts due for each meal, and how are changes handled after that date?",
+            "What is the loading and delivery schedule on event days, and how does it affect transfer timing?"
+          ]
+        },
+        "Write the answers down and share them with everyone on your team. If you try one, reply and tell me what you learned."
+      ]
+    },
+    {
+      "day": 9,
+      "subject": "A dinner that came together in two hours",
+      "paragraphs": [
+        "During one of the events I hosted in Orlando in 2026, a group needed dinner reservations at a restaurant that almost never has openings, plus transportation for everyone, with no advance notice.",
+        "It came together in under two hours, through relationships built over years. The evening came off without a visible seam, and the group never saw the work behind it, which is exactly how I like it.",
+        "That is the kind of care I bring to each event: every attendee considered individually, and someone reachable the whole way through. If you are planning an event and would like to talk it through, a discovery call is a relaxed place to start: https://travelghr.com/contact"
+      ]
+    },
+    {
+      "day": 14,
+      "subject": "What a discovery call covers",
+      "paragraphs": [
+        "If you would like to talk about an event, a discovery call is simply a conversation. We would cover:",
+        {
+          "ul": [
+            "The event, the dates, and where your attendees are traveling from.",
+            "What you would most like handled, and what is already in place.",
+            "Any attendees with specific needs, such as speakers or hosts.",
+            "Whether working together feels like a good fit for both of us."
+          ]
+        },
+        "If it is a fit, we will talk about next steps. If it is not, I will say so kindly. You can reach me here: https://travelghr.com/contact",
+        "Whether or not we work together, I hope the checklist serves your event well."
+      ]
+    }
+  ]
+}

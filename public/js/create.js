@@ -256,7 +256,9 @@ function renderPackage(pkg, onDelete) {
         }, '🧑‍💻 Film with Avatar')));
     }
     if (active === 'instagram_carousel') body.append(carouselMediaBlock(pkg, () => { drawTabs(); drawBody(); }));
-    if (spec?.group === 'video') body.append(producePanel(pkg, active, () => { drawTabs(); drawBody(); }));
+    if (asset.sharedVideoWith) {
+      body.append(el('p', { class: 'muted' }, `This reel is the same video as the ${specs[asset.sharedVideoWith]?.label || asset.sharedVideoWith}. Produce it once there; this tab holds the Facebook-native caption.`));
+    } else if (spec?.group === 'video') body.append(producePanel(pkg, active, () => { drawTabs(); drawBody(); }));
   };
 
   drawTabs();

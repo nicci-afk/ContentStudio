@@ -230,7 +230,8 @@ function mediaLinks(pkg, platformId, spec, renders) {
   const links = [];
   const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
   if (spec?.group === 'video') {
-    const done = renders.filter((r) => r.platformId === platformId && (r.status || 'done') === 'done');
+    const src = pkg.platforms?.[platformId]?.sharedVideoWith || platformId;
+    const done = renders.filter((r) => r.platformId === src && (r.status || 'done') === 'done');
     if (done[0]) {
       links.push({ label: `⬇ ${slug}-${platformId}.mp4 (upload master)`, href: `/api/render/${done[0].id}/video`, download: `${slug}-${platformId}.mp4` });
       links.push({ label: '⬇ captions .srt', href: `/api/render/${done[0].id}/srt`, download: `${slug}.srt` });

@@ -17,7 +17,8 @@ if (fs.existsSync(envFile)) {
 
 const { stateStore, mediaStore, packageStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace,
-  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary } =
+  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary,
+  leadStore, findWorkspaceByLeadKey } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
@@ -33,6 +34,7 @@ const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
 const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
 const { buildSiteSetupKit } = await import('./lib/sitekit.js');
+const { upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript } = await import('./lib/leads.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
 
@@ -170,6 +172,111 @@ app.get('/api/site-setup-kit', (req, res) => {
     stateStore.set(state);
   }
   res.json({ markdown: buildSiteSetupKit(state.profile, biz.indexNowKey), indexNowKey: biz.indexNowKey });
+});
+
+// ---- leads ---------------------------------------------------------------
+// The Google Form bridge (Apps Script) posts each application here with a
+// per-workspace secret. Auth is the key, not a session, so this one path is
+// public in lib/auth.js. Rate limited per IP; unknown keys are counted harder.
+
+const leadHits = new Map();
+const leadFails = new Map();
+const hit = (map, key, max, windowMs) => {
+  const now = Date.now();
+  const e = map.get(key);
+  if (!e || e.reset < now) { map.set(key, { n: 1, reset: now + windowMs }); return false; }
+  e.n += 1;
+  return e.n > max;
+};
+const clientIp = (req) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+
+app.post('/api/leads/ingest', wrap(async (req, res) => {
+  const ip = clientIp(req);
+  if (hit(leadHits, ip, 120, 10 * 60 * 1000)) return res.status(429).json({ error: 'too many requests' });
+  if (JSON.stringify(req.body || {}).length > 20000) return res.status(413).json({ error: 'payload too large' });
+  const wsId = findWorkspaceByLeadKey(req.get('x-ingest-key'));
+  if (!wsId) {
+    if (hit(leadFails, ip, 20, 15 * 60 * 1000)) return res.status(429).json({ error: 'too many requests' });
+    return res.status(401).json({ error: 'invalid key' });
+  }
+  await runWithWorkspace(wsId, async () => {
+    const out = upsertLead(leadStore, req.body);
+    if (out.error) return res.status(400).json({ error: out.error });
+    const { lead, duplicate } = out;
+    res.json({ ok: true, id: lead.id, tier: lead.score.tier, duplicate });
+    if (duplicate) return;
+    // Side effects after replying; each outcome is recorded on the lead.
+    const biz = stateStore.get().profile?.business || {};
+    const brand = biz.name || 'your business';
+    const settings = leadStore.get().settings || {};
+    const record = (patch) => leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, ...patch } : x)) }));
+    try {
+      record({ notify: { ...(await notifyLead(lead, { to: settings.notifyEmail || process.env.LEAD_NOTIFY_EMAIL, brand })), at: new Date().toISOString() } });
+    } catch (err) {
+      record({ notify: { status: 'error', reason: String(err.message).slice(0, 200), at: new Date().toISOString() } });
+    }
+    try {
+      record({ capi: { ...(await sendLeadToMeta(lead, { pixelId: biz.metaPixelId, site: biz.links?.website, brand })), at: new Date().toISOString() } });
+    } catch (err) {
+      record({ capi: { status: 'error', reason: String(err.message).slice(0, 200), at: new Date().toISOString() } });
+    }
+  });
+}));
+
+app.get('/api/leads', (req, res) => {
+  const d = leadStore.get();
+  const s = d.settings || {};
+  res.json({
+    items: d.items,
+    summary: leadSummary(d.items),
+    statuses: leadStatuses(),
+    settings: {
+      notifyEmail: s.notifyEmail || process.env.LEAD_NOTIFY_EMAIL || '',
+      keyMinted: !!s.ingestKey,
+      capi: { tokenSet: !!process.env.META_CAPI_TOKEN, pixelId: stateStore.get().profile?.business?.metaPixelId || '', testMode: !!process.env.META_TEST_EVENT_CODE },
+    },
+  });
+});
+
+// Mints the ingest key on first use and returns the ready-to-paste script.
+app.get('/api/leads/setup', (req, res) => {
+  const d = leadStore.get();
+  const settings = { ...(d.settings || {}) };
+  if (!settings.ingestKey) {
+    settings.ingestKey = newLeadKey();
+    leadStore.set({ ...d, settings });
+  }
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0];
+  const endpoint = `${proto}://${req.get('host')}/api/leads/ingest`;
+  res.json({ endpoint, ingestKey: settings.ingestKey, appsScript: buildAppsScript({ endpoint, key: settings.ingestKey }) });
+});
+
+app.put('/api/leads/settings', (req, res) => {
+  const to = String(req.body?.notifyEmail || '').trim().toLowerCase();
+  if (to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'enter a valid email address' });
+  const d = leadStore.get();
+  leadStore.set({ ...d, settings: { ...(d.settings || {}), notifyEmail: to } });
+  res.json({ ok: true });
+});
+
+app.patch('/api/leads/:id', (req, res) => {
+  const d = leadStore.get();
+  if (!d.items.some((x) => x.id === req.params.id)) return res.status(404).json({ error: 'not found' });
+  const patch = {};
+  if (req.body?.status !== undefined) {
+    if (!leadStatuses().includes(req.body.status)) return res.status(400).json({ error: 'unknown status' });
+    patch.status = req.body.status;
+  }
+  if (req.body?.notes !== undefined) patch.notes = String(req.body.notes).slice(0, 2000);
+  leadStore.set({ ...d, items: d.items.map((x) => (x.id === req.params.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x)) });
+  res.json({ ok: true });
+});
+
+// Deletion on request (a lead's right to be forgotten).
+app.delete('/api/leads/:id', (req, res) => {
+  const d = leadStore.get();
+  leadStore.set({ ...d, items: d.items.filter((x) => x.id !== req.params.id) });
+  res.json({ ok: true });
 });
 
 // Token and prompt-cache ledger for this server process (resets on restart).

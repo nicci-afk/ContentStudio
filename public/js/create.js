@@ -400,7 +400,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const videoSpec = appState.platforms.find((p) => p.id === platformId)?.videoSpec || null;
   // Default to a short avatar open, then B-roll: the fewest HeyGen credits,
   // and what she wants (a few seconds on camera, not a full-video avatar).
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', avatarAudio: 'narration', orientation: defaultOrientation, delivery: savedDelivery || 'calm' };
+  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', avatarAudio: 'narration', orientation: defaultOrientation, delivery: savedDelivery || 'calm', resolution: 'hd' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; saveVoicePref('narration', state.voiceId); } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -415,6 +415,33 @@ function producePanel(pkg, platformId, onPackageUpdated) {
     el('option', { value: 'calm', selected: state.delivery === 'calm' }, 'Warm & calm delivery'),
     el('option', { value: 'balanced', selected: state.delivery === 'balanced' }, 'Balanced delivery'),
     el('option', { value: 'energetic', selected: state.delivery === 'energetic' }, 'Energetic delivery'));
+  // Output resolution. YouTube long-form defaults to 4K where this server can
+  // render it; everything else defaults to Full HD. The server reports what
+  // it can safely do (4K needs memory), so the choice never crashes a render.
+  const resolutionNote = el('p', { class: 'muted', style: 'margin:2px 0 6px;display:none' });
+  const resolutionSelect = el('select', { class: 'input select', title: 'Output resolution', onchange: (e) => {
+    state.resolution = e.target.value;
+    drawResolutionNote();
+    try { localStorage.setItem(`cs_resolution_${platformId}`, state.resolution); } catch { /* remember is best-effort */ }
+  } },
+    el('option', { value: 'hd' }, 'Full HD 1080p'),
+    el('option', { value: '4k' }, '4K Ultra HD'));
+  let resolutionCaps = null;
+  const drawResolutionNote = () => {
+    const cap4k = resolutionCaps?.resolutions.find((r) => r.id === '4k');
+    resolutionNote.textContent = state.resolution === '4k' && cap4k?.note ? cap4k.note : (!cap4k?.available && cap4k?.note ? cap4k.note : '');
+    resolutionNote.style.display = resolutionNote.textContent ? 'block' : 'none';
+  };
+  api.renderCapabilities().then((caps) => {
+    resolutionCaps = caps;
+    const cap4k = caps.resolutions.find((r) => r.id === '4k');
+    resolutionSelect.querySelector('option[value="4k"]').disabled = !cap4k?.available;
+    let saved = null;
+    try { saved = localStorage.getItem(`cs_resolution_${platformId}`); } catch { /* none */ }
+    state.resolution = cap4k?.available && (saved ? saved === '4k' : platformId === 'youtube_long') ? '4k' : 'hd';
+    resolutionSelect.value = state.resolution;
+    drawResolutionNote();
+  }).catch(() => {});
   const result = el('div', {});
   const renderList = el('div', {});
 
@@ -555,7 +582,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
               title: 'Same video with audio removed — use for silent autoplay or adding your own music',
             }, '⬇ No sound'),
             el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarVoice === 'narration' && r.avatar ? ' · one voice (your clone)' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)),
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.resolution === '4k' ? ' · 4K' : r.resolution === 'hd' ? ' · 1080p' : ''}${r.fps ? ` ${r.fps}fps` : ''}${r.hdrClips ? ` · ${r.hdrClips} HDR clip${r.hdrClips === 1 ? '' : 's'} converted` : ''}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarVoice === 'narration' && r.avatar ? ' · one voice (your clone)' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)),
           clipsBlock(r));
       };
       const active = mine.filter((r) => (r.status || 'done') !== 'done');
@@ -580,6 +607,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
         voiceId: state.voiceId,
         orientation: state.orientation,
         delivery: state.delivery,
+        resolution: state.resolution,
         avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope, style: state.avatarStyle, audioSource: state.avatarAudio } : null,
       });
       while (true) {
@@ -621,7 +649,8 @@ function producePanel(pkg, platformId, onPackageUpdated) {
       el('span', { class: 'field-label' }, '🎬 Auto-produce this video'),
       el('span', { class: 'muted' }, 'Your library imagery + your cloned voice, rendered to a finished MP4')),
     el('div', { class: 'row gap wrap produce-controls' },
-      voiceSelect, deliverySelect, orientationSelect, avatarToggle),
+      voiceSelect, deliverySelect, orientationSelect, resolutionSelect, avatarToggle),
+    resolutionNote,
     avatarWrap,
     ...(videoSpec
       ? [el('p', { class: 'muted', style: 'margin:2px 0 6px' },

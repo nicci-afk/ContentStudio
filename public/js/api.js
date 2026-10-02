@@ -93,6 +93,7 @@ export const api = {
   editCitations: (id, patch) => send('PATCH', `/api/packages/${id}/citations`, patch),
   setPackageEvent: (id, event) => send('POST', `/api/packages/${id}/event`, event),
   render: (body) => send('POST', '/api/render', body),
+  renderCapabilities: () => get('/api/render/capabilities'),
   renderStatus: (id) => get(`/api/render/${id}`),
   packageRenders: (pkgId) => get(`/api/packages/${pkgId}/renders`),
   cutClips: (renderId) => send('POST', `/api/render/${renderId}/clips`, {}),

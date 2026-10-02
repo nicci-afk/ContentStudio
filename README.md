@@ -71,10 +71,18 @@ Every business gets its own isolated workspace — profile, interview, voice DNA
 ### Media
 | Method | Path | Description |
 |---|---|---|
-| GET / POST | `/api/media` | List / add asset (`thumbB64`, `analysisB64`, EXIF fields) |
+| GET | `/api/media` | Paginated, filterable list: `limit`, `offset`, `q`, `kind`, `album`, `sort` (taken/added/quality), `favorite`, `usable=1`; includes held and pending counts |
+| POST | `/api/media` | Add asset in-app (`thumbB64`, `analysisB64`, EXIF fields); starts unscreened |
 | POST | `/api/media/:id/analyze` | AI alt text, keywords, place, story ideas |
 | PATCH / DELETE | `/api/media/:id` | Edit / remove |
-| GET | `/api/media/:id/thumb` | Thumbnail JPEG |
+| GET | `/api/media/:id/thumb` | Thumbnail JPEG (signed redirect when stored in the bucket) |
+| GET | `/api/media/:id/file` | Full-quality download (signed redirect; HEIC downloads as a JPEG still) |
+| POST / GET | `/api/media/analysis` | Library-wide AI analysis queue (newest first); `dryRun` returns a size estimate |
+| GET / POST | `/api/media/migrate` | Move the on-disk library into the bucket (copy, verify, then delete local) |
+| GET | `/api/moderation` | Held items (names and reasons only); `POST /api/moderation/scan` safety-checks older items; `POST/DELETE /api/moderation/:id/release` approves or withdraws a release |
+| GET / POST | `/api/albums`, `/api/albums/:id`, `/api/albums/:id/profile`, `/api/albums/profiles` | Albums with AI profiles |
+| POST | `/api/ingest/plan`, `/multipart/start`, `/multipart/complete`, `/commit` | The Photos sync tool's upload protocol (see `tools/photos-sync`) |
+| GET | `/api/render/capabilities` | Which output resolutions this server can render (4K needs memory) |
 
 ### Generation
 | Method | Path | Description |

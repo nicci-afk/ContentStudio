@@ -25,7 +25,7 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
+const { startRender, renderCapabilities, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
 const { registerMediaRoutes } = await import('./lib/media-routes.js');
 const { catalog, albumStore, currentLibrary } = await import('./lib/store.js');
@@ -611,7 +611,7 @@ app.delete('/api/packages/:id', (req, res) => {
 // ---- auto-produce (finished video rendering) -----------------------------
 
 app.post('/api/render', wrap(async (req, res) => {
-  const { packageId, platformId, voiceId, orientation, avatar, delivery } = req.body;
+  const { packageId, platformId, voiceId, orientation, avatar, delivery, resolution } = req.body;
   const pkg = packageStore.get().items.find((p) => p.id === packageId);
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   const fields = pkg.platforms?.[platformId]?.fields;
@@ -623,9 +623,14 @@ app.post('/api/render', wrap(async (req, res) => {
     orientation: orientation || (platformId === 'youtube_long' ? 'landscape' : 'portrait'),
     avatar: avatar || null,
     delivery: delivery || null,
+    resolution: resolution === '4k' ? '4k' : 'hd',
   });
   res.json({ renderId });
 }));
+
+// Static path before '/api/render/:id'. What this server can render: 4K needs
+// memory, so the UI offers it only where it is safe.
+app.get('/api/render/capabilities', (req, res) => res.json(renderCapabilities()));
 
 app.get('/api/render/:id', (req, res) => {
   const job = renderJob(req.params.id);

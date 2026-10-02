@@ -1159,7 +1159,12 @@ app.post('/api/render', wrap(async (req, res) => {
   if (music) {
     const raw = fields.overlay_text || fields.on_image_text || hookText;
     const texts = String(Array.isArray(raw) ? raw.join('\n') : raw)
-      .split('\n').map((l) => l.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*|text(?:\s*overlay)?\s*[:\-]\s*)/i, '').trim()).filter(Boolean).slice(0, 12);
+      .split('\n').map((l) => l.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*|text(?:\s*overlay)?\s*[:\-]\s*)/i, '').trim()).filter(Boolean);
+    // The hook field is beat one (so picking another hook option updates the
+    // video); the generated overlay text repeats the hook on its first line.
+    const hookLine = String(fields.hook || '').trim();
+    if (hookLine && hookLine.split(/\s+/).length <= 14) texts.splice(0, texts.length ? 1 : 0, hookLine);
+    texts.length = Math.min(texts.length, 12);
     if (!texts.length) return res.status(400).json({ error: 'this reel has no on-screen text beats to burn in. Fill the On-screen text field first' });
     musicOpts = { seconds: Math.min(60, Math.max(8, Math.round(Number(music.seconds) || 30))), texts };
   }

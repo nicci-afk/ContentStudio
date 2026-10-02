@@ -55,7 +55,7 @@ export async function renderLeads(root) {
           el('td', { style: 'padding:8px' },
             el('div', { style: 'font-weight:600' }, l.stage === 'application' ? 'Applied' : 'Resource'),
             (l.resources || []).length ? el('div', { class: 'muted' }, l.resources.join(', ')) : null,
-            l.source?.utm_source || l.howHeard ? el('div', { class: 'muted' }, l.source?.utm_source || l.howHeard) : null,
+            l.channel ? el('div', { class: 'muted' }, l.channel) : null,
             (l.sequence?.sent || []).length ? el('div', { class: 'muted' }, `${l.sequence.sent.length} follow-up${l.sequence.sent.length > 1 ? 's' : ''} sent`) : null,
             l.unsubscribed ? el('div', { class: 'muted' }, 'unsubscribed') : null),
           el('td', { style: 'padding:8px' }, l.yearsAdvisor),

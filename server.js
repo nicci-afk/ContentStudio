@@ -34,7 +34,7 @@ const { lintProfile } = await import('./lib/lint.js');
 const { auditUrl } = await import('./lib/crawl.js');
 const { submitIndexNow, newIndexNowKey } = await import('./lib/indexnow.js');
 const { buildSiteSetupKit } = await import('./lib/sitekit.js');
-const { upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
+const { leadChannel, upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
 const { loadManifest, findResource, resourcePath } = await import('./lib/resources.js');
 
 const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
@@ -258,6 +258,8 @@ app.options('/api/leads/capture', (req, res) => {
   res.status(204).end();
 });
 
+// Optional self-reported source (a fixed list, so free text never lands here).
+const HOW_HEARD = ['An AI assistant (ChatGPT, Claude, Perplexity, or similar)', 'Google or Bing search', 'Instagram or Facebook', 'LinkedIn', 'YouTube', 'A friend or colleague', 'Podcast or event', 'Email', 'Somewhere else'];
 app.post('/api/leads/capture', wrap(async (req, res) => {
   const ip = clientIp(req);
   const now = Date.now();
@@ -276,9 +278,11 @@ app.post('/api/leads/capture', wrap(async (req, res) => {
   await runWithWorkspace(wsId, async () => {
     const tags = {
       utm_source: b.utm_source, utm_medium: b.utm_medium, utm_campaign: b.utm_campaign, utm_content: b.utm_content, fbclid: b.fbclid, page: b.page,
+      referrer: String(b.referrer || '').toLowerCase().replace(/[^a-z0-9.\-]/g, ''),
     };
     const out = upsertLead(leadStore, {
       firstName: b.firstName, email: b.email, yearsAdvisor: b.yearsAdvisor, agency: b.agency,
+      howHeard: HOW_HEARD.includes(b.howHeard) ? b.howHeard : '',
       consent: b.adConsent === true, sourceTags: tags, fbc: b.fbc, fbp: b.fbp,
     }, { stage: 'resource', resource: resource.slug, optIn: { at: new Date().toISOString(), text: CONSENT_TEXT_V1, page: String(b.page || '').slice(0, 300) } });
     if (out.error) return res.status(400).json({ error: out.error });
@@ -390,7 +394,7 @@ app.get('/api/leads', (req, res) => {
   const d = leadStore.get();
   const s = d.settings || {};
   res.json({
-    items: d.items,
+    items: d.items.map((l) => ({ ...l, channel: leadChannel(l) })),
     summary: leadSummary(d.items),
     statuses: leadStatuses(),
     settings: {

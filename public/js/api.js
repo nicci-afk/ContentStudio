@@ -137,6 +137,38 @@ export const api = {
   shortsTranslate: (id, languages) => send('POST', `/api/shorts/${id}/translate`, { languages }),
   shortsReplies: (id, comments) => send('POST', `/api/shorts/${id}/replies`, { comments }),
 
+  edits: () => get('/api/edits'),
+  createEdit: (body) => send('POST', '/api/edits', body),
+  edit: (id) => get(`/api/edits/${id}`),
+  saveEdit: (id, body) => send('PUT', `/api/edits/${id}`, body),
+  deleteEdit: (id) => send('DELETE', `/api/edits/${id}`),
+  planEdit: (id, body) => send('POST', `/api/edits/${id}/plan`, body),
+  editBeats: (id, assetId, snap) => send('POST', `/api/edits/${id}/beats`, { assetId, snap }),
+  renderEdit: (id) => send('POST', `/api/edits/${id}/render`, {}),
+  editSocial: (id) => send('POST', `/api/edits/${id}/social`, {}),
+  editToShort: (id) => send('POST', `/api/edits/${id}/to-short`, {}),
+  templates: () => get('/api/templates'),
+  saveTemplate: (body) => send('POST', '/api/templates', body),
+  deleteTemplate: (id) => send('DELETE', `/api/templates/${id}`),
+  trends: () => get('/api/trends'),
+  refreshTrends: () => send('POST', '/api/trends/refresh', {}),
+  trendSettings: (body) => send('PUT', '/api/trends/settings', body),
+  // Generic streamed upload with progress (assets, reference reels).
+  uploadFile: (url, file, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('content-type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* not json */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(new Error(body.error || `upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('upload interrupted'));
+    xhr.send(file);
+  }),
+
   plan: () => get('/api/plan'),
   savePlan: (plan) => send('PUT', '/api/plan', plan),
   runPlan: (itemId) => send('POST', '/api/plan/run', itemId ? { itemId } : {}),

@@ -27,11 +27,13 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
+const { startRender, renderJob, renderFile, rendersDir, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender, diskFree } = await import('./lib/storage.js');
 const shortsLib = await import('./lib/shorts.js');
 const gLib = await import('./lib/google.js');
 const measureLib = await import('./lib/measure.js');
+const editLib = await import('./lib/edit.js');
+const trendLib = await import('./lib/trends.js');
 const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.js');
 const { getPlan, normalizePlan, planQueue, runPlan, planRunning, schedulePlan, FACT_LABELS, MAX_PER_RUN, DAILY_DRAFT_CAP } = await import('./lib/plan.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
@@ -1792,6 +1794,129 @@ app.post('/api/packages/:id/results/manual', (req, res) => {
   }
 });
 
+// ---- editor: edit lists, templates, trend watch --------------------------------
+
+// Streams a request body to disk (never buffered) with a size cap.
+function streamToFile(req, res, dest, maxBytes, onDone) {
+  const part = `${dest}.part`;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const out = fs.createWriteStream(part);
+  let received = 0;
+  let failed = false;
+  const abort = (code, message) => {
+    if (failed) return;
+    failed = true;
+    out.destroy();
+    fs.rm(part, { force: true }, () => {});
+    req.destroy();
+    if (!res.headersSent) res.status(code).json({ error: message });
+  };
+  if (Number(req.headers['content-length'] || 0) > maxBytes) return abort(413, `the file is larger than the ${Math.round(maxBytes / 1e6)}MB limit`);
+  req.on('data', (c) => { received += c.length; if (received > maxBytes) abort(413, `the file is larger than the ${Math.round(maxBytes / 1e6)}MB limit`); });
+  req.on('error', () => abort(400, 'upload interrupted'));
+  out.on('error', () => abort(500, 'could not write the file to disk'));
+  out.on('finish', () => {
+    if (failed) return;
+    fs.rename(part, dest, (err) => (err ? abort(500, 'could not store the file') : Promise.resolve(onDone(received)).catch((e) => { fs.rm(dest, { force: true }, () => {}); if (!res.headersSent) res.status(400).json({ error: e.message }); })));
+  });
+  req.pipe(out);
+}
+
+app.get('/api/edits', (req, res) => res.json({ items: editLib.listEdits() }));
+
+app.post('/api/edits', (req, res) => res.json({ edit: editLib.createEdit({ title: req.body?.title, brief: req.body?.brief }) }));
+
+app.get('/api/edits/:id', (req, res) => {
+  const e = editLib.editStatus(req.params.id);
+  if (!e) return res.status(404).json({ error: 'unknown edit' });
+  res.json({ edit: e });
+});
+
+app.put('/api/edits/:id', wrap(async (req, res) => {
+  if (!editLib.getEdit(req.params.id)) return res.status(404).json({ error: 'unknown edit' });
+  try { res.json({ edit: await editLib.saveEdl(req.params.id, req.body?.edl, req.body?.title) }); } catch (err) { res.status(400).json({ error: err.message }); }
+}));
+
+app.delete('/api/edits/:id', (req, res) => {
+  try { res.json({ ok: editLib.deleteEdit(req.params.id) }); } catch (err) { res.status(409).json({ error: err.message }); }
+});
+
+app.post('/api/edits/:id/plan', wrap(async (req, res) => {
+  if (!editLib.getEdit(req.params.id)) return res.status(404).json({ error: 'unknown edit' });
+  const template = req.body?.templateId ? trendLib.getTemplate(String(req.body.templateId)) : null;
+  try { res.json({ edit: await editLib.applyPlan(req.params.id, req.body?.brief || {}, template) }); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+
+app.post('/api/edits/:id/assets', (req, res) => {
+  if (!editLib.getEdit(req.params.id)) return res.status(404).json({ error: 'unknown edit' });
+  const aid = uid();
+  const name = String(req.query.name || 'upload').slice(0, 120);
+  streamToFile(req, res, editLib.assetPath(req.params.id, aid), editLib.MAX_ASSET_BYTES, async (bytes) => {
+    const asset = await editLib.registerAsset(req.params.id, aid, name, bytes);
+    res.json({ asset, edit: editLib.getEdit(req.params.id) });
+  });
+});
+
+app.get('/api/edits/:id/asset/:aid', (req, res) => {
+  const e = editLib.getEdit(req.params.id);
+  const a = e?.assets?.find((x) => x.id === req.params.aid);
+  const f = a && editLib.assetPath(e.id, a.id);
+  if (!f || !fs.existsSync(f)) return res.status(404).end();
+  res.type(a.kind === 'audio' ? 'audio/mpeg' : a.kind === 'image' ? 'image/jpeg' : 'video/mp4').sendFile(f);
+});
+
+app.post('/api/edits/:id/beats', wrap(async (req, res) => {
+  const e = editLib.getEdit(req.params.id);
+  const a = e?.assets?.find((x) => x.id === req.body?.assetId && x.kind !== 'image');
+  if (!a) return res.status(404).json({ error: 'pick an uploaded audio or video file' });
+  try {
+    const info = await editLib.analyzeBeats(editLib.assetPath(e.id, a.id));
+    const startAt = Number(e.edl?.audio?.music?.startAt) || 0;
+    const beats = info.beats.filter((t) => t >= startAt).map((t) => Math.round((t - startAt) * 1000) / 1000);
+    let edit = e;
+    if (req.body?.snap && e.edl.clips.length > 1) edit = await editLib.saveEdl(e.id, editLib.snapToBeats(e.edl, beats));
+    res.json({ bpm: info.bpm, beats: beats.slice(0, 80), edit });
+  } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+
+app.post('/api/edits/:id/render', (req, res) => {
+  try { editLib.startEditRender(req.params.id); res.json({ ok: true }); } catch (err) { res.status(409).json({ error: err.message }); }
+});
+
+app.post('/api/edits/:id/social', wrap(async (req, res) => {
+  try { res.json({ edit: await editLib.writeSocialCopy(req.params.id) }); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+
+app.post('/api/edits/:id/to-short', (req, res) => {
+  try { res.json({ packageId: editLib.sendToShort(req.params.id) }); } catch (err) { res.status(409).json({ error: err.message }); }
+});
+
+app.get('/api/templates', (req, res) => res.json({ items: trendLib.listTemplates() }));
+
+// A reference reel is read for structure and then deleted: the file is never kept.
+app.post('/api/templates/analyze', (req, res) => {
+  const tmp = path.join(rendersDir(), `tmp-ref-up-${uid()}.mp4`);
+  streamToFile(req, res, tmp, 200 * 1024 * 1024, async () => {
+    try { res.json({ template: await trendLib.analyzeReference(tmp, String(req.query.name || '').slice(0, 80)) }); } finally { fs.rmSync(tmp, { force: true }); }
+  });
+});
+
+app.post('/api/templates', wrap(async (req, res) => {
+  const { name, notes, structure, id } = req.body || {};
+  try {
+    if (notes && !structure) return res.json({ template: await trendLib.templateFromNotes(name || 'My pattern', notes) });
+    res.json({ template: trendLib.saveTemplate({ id, name, structure, source: 'manual' }) });
+  } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+
+app.delete('/api/templates/:id', (req, res) => { trendLib.deleteTemplate(req.params.id); res.json({ ok: true }); });
+
+app.get('/api/trends', (req, res) => res.json(trendLib.trendState()));
+app.post('/api/trends/refresh', wrap(async (req, res) => {
+  try { await trendLib.runTrendWatch(); res.json(trendLib.trendState()); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+app.put('/api/trends/settings', (req, res) => res.json(trendLib.saveTrendSettings(req.body || {})));
+
 // ---- storage (shared data disk: report, cleanup, render deletion) --------
 
 app.get('/api/storage', (req, res) => res.json(storageReport(activeRenderIds())));
@@ -1858,6 +1983,7 @@ if (swept.freedBytes > 0) {
 scheduleBackups();
 schedulePlan();
 measureLib.scheduleMeasure();
+trendLib.scheduleTrends();
 
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {

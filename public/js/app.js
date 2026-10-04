@@ -16,6 +16,7 @@ import { renderLedger } from './ledger.js';
 import { renderTrips } from './trips.js';
 import { renderPlan } from './plan.js';
 import { renderShorts } from './shorts.js';
+import { renderEditor } from './editor.js';
 
 const ROUTES = [
   { path: 'dashboard', label: 'Dashboard', icon: '◈', render: renderDashboard },
@@ -30,6 +31,7 @@ const ROUTES = [
   { path: 'visibility', label: 'Visibility', icon: '◎', render: renderLedger },
   { path: 'plan', label: 'Plan', icon: '🗓', render: renderPlan },
   { path: 'shorts', label: 'Reel to Short', icon: '▶', render: renderShorts },
+  { path: 'editor', label: 'Editor', icon: '✂', render: renderEditor },
   { path: 'voice-studio', label: 'Voice Studio', icon: '🎙', render: renderVoiceStudio },
   { path: 'avatar-studio', label: 'Avatar Studio', icon: '🎬', render: renderAvatarStudio },
   // Reached from a package's "Publish Run" button, not the nav.

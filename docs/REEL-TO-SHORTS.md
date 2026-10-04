@@ -20,3 +20,17 @@ Shorts may run up to 3 minutes (square or vertical). A Content ID claim blocks a
 
 ## Test rig
 Mock Anthropic and ElevenLabs servers via `ANTHROPIC_API_URL`, `ELEVENLABS_API_URL`, and `YOUTUBE_OEMBED_URL`. Not in the repo.
+
+
+## Added 2026-10-04 (second pass)
+- **Measurement loop** (`lib/google.js`, `lib/measure.js`): per business OAuth to YouTube (read only scopes), results at 48 hours, 7 days and 28 days (views, likes, comments, shares, subscribers gained, average view duration and percentage, engaged views, traffic sources, retention curve) plus a plain-language reading of the retention curve (2 second hold, biggest drop, end hold). She can type the Studio "viewed vs swiped away" percentage on each Short. After 3 measured Shorts "Explain what is working" writes findings; after 4 the measured best and weakest Shorts, length bands and findings are added to the copy prompt (`learningBlock`). A 3 hour sweep takes due checkpoints; `GET /api/measure/overview`, `POST /api/measure/insights`, `POST /api/packages/:id/results/check|manual`. Public numbers work with `YOUTUBE_API_KEY` alone.
+- **Channel audit** (`GET /api/youtube/channel-audit`): name, About text, site link, location, keywords and handle against the brand profile.
+- **Entity check:** flags when neither the creator, the brand nor the place is said (first 10 seconds of the transcript) or shown early on screen. **Hook score:** Claude rates the opening 1 to 10 from the first frame and line, with a fix under 6.
+- **Disclosure line** (hosted by, commission) is written by code, not the model, and inserted before the hashtags. **Related video** and **schedule** steps are added to the Chrome prompt. **Consent checklist** gates the prompt. **Duplicate guard** hashes the upload (SHA-256) and warns on an identical file.
+- **Translated captions** (es, fr, pt, de, it) as extra .srt files, **reply drafts** for early comments (draft only), Leads page labels `utm_source=youtube_shorts` as "YouTube Shorts".
+
+### Setting up YouTube access (hers, one time)
+1. Google Cloud: create a project, enable "YouTube Data API v3" and "YouTube Analytics API".
+2. OAuth consent screen: add her Google account. IMPORTANT: apps left in "Testing" get refresh tokens that expire after 7 days, so publish the app ("In production"); an unverified app shows a warning screen for a single user and works.
+3. Create an OAuth client ID of type Web application with redirect URI `<site>/api/youtube/callback` (for production `https://contentstudio-zc9j.onrender.com/api/youtube/callback`).
+4. Render env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (and optionally `PUBLIC_BASE_URL`, `YOUTUBE_API_KEY`). Then Reel to Short, "Connect YouTube" in each business. Tokens live in `youtube-auth.json` in the workspace folder, which is deliberately not in backups.

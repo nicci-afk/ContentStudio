@@ -55,7 +55,24 @@ export const api = {
   voiceDna: (files) => send('POST', '/api/voice-dna', { files }),
   removeVoiceSource: (name) => send('POST', '/api/voice-dna/remove', { name }),
 
-  media: () => get('/api/media'),
+  media: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false).map(([k, v]) => [k, v === true ? '1' : String(v)]));
+    return get(`/api/media${q.toString() ? `?${q}` : ''}`);
+  },
+  matchMedia: (files) => send('POST', '/api/media/match', { files }),
+  migrationStatus: () => get('/api/media/migrate'),
+  startMigration: () => send('POST', '/api/media/migrate', {}),
+  mediaAnalysis: () => get('/api/media/analysis'),
+  startAnalysis: (body = {}) => send('POST', '/api/media/analysis', body),
+  moderation: () => get('/api/moderation'),
+  approveRelease: (id) => send('POST', `/api/moderation/${id}/release`, {}),
+  revokeRelease: (id) => send('DELETE', `/api/moderation/${id}/release`),
+  scanLegacy: (body = {}) => send('POST', '/api/moderation/scan', body),
+  albums: () => get('/api/albums'),
+  album: (id) => get(`/api/albums/${id}`),
+  buildAlbumProfile: (id) => send('POST', `/api/albums/${id}/profile`, {}),
+  buildAllProfiles: () => send('POST', '/api/albums/profiles', {}),
+  profilesJob: () => get('/api/albums/profiles'),
   addMedia: (item) => send('POST', '/api/media', item),
   uploadMediaOriginal: (id, file) =>
     fetch(`/api/media/${id}/original`, {
@@ -96,6 +113,7 @@ export const api = {
   editCitations: (id, patch) => send('PATCH', `/api/packages/${id}/citations`, patch),
   setPackageEvent: (id, event) => send('POST', `/api/packages/${id}/event`, event),
   render: (body) => send('POST', '/api/render', body),
+  renderCapabilities: () => get('/api/render/capabilities'),
   renderStatus: (id) => get(`/api/render/${id}`),
   packageRenders: (pkgId) => get(`/api/packages/${pkgId}/renders`),
   cutClips: (renderId) => send('POST', `/api/render/${renderId}/clips`, {}),

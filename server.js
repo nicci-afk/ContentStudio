@@ -27,8 +27,12 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
   await import('./lib/providers.js');
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
-const { startRender, renderJob, renderFile, rendersDir, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
+const { startRender, renderCapabilities, renderJob, renderFile, rendersDir, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender, diskFree } = await import('./lib/storage.js');
+const { registerMediaRoutes } = await import('./lib/media-routes.js');
+const { catalog, albumStore, currentLibrary } = await import('./lib/store.js');
+const { withAlbumContext } = await import('./lib/albums.js');
+const { mediaStatusFor } = await import('./lib/moderation.js');
 const shortsLib = await import('./lib/shorts.js');
 const gLib = await import('./lib/google.js');
 const measureLib = await import('./lib/measure.js');
@@ -651,165 +655,10 @@ app.post('/api/voice-dna/remove', wrap(async (req, res) => {
   res.json({ voiceDna: state.profile.voiceDna });
 }));
 
-// ---- media ---------------------------------------------------------------
-
-// The library is shared across every business — every workspace's AI
-// selection and manual picks can use anything in it, so uploads carry no
-// per-business tag at all (a prior version auto-tagged with whatever
-// workspace happened to be active at upload time, which just meant an
-// import landed under the wrong label whenever that workspace wasn't the
-// one intended).
-app.get('/api/media', (req, res) => res.json({ items: mediaStore.get().items }));
-
-app.post('/api/media', wrap(async (req, res) => {
-  const { name, mime, kind, size, w, h, takenAt, gps, thumbB64, analysisB64, renderB64 } = req.body;
-  const id = uid();
-  if (thumbB64) saveMediaFile(id, 'thumb', Buffer.from(thumbB64, 'base64'));
-  if (analysisB64) saveMediaFile(id, 'analysis', Buffer.from(analysisB64, 'base64'));
-  if (renderB64) saveMediaFile(id, 'render', Buffer.from(renderB64, 'base64'));
-  const record = {
-    id, name, mime, kind: kind || (String(mime).startsWith('video') ? 'video' : 'image'),
-    size: size || 0, w: w || null, h: h || null,
-    takenAt: takenAt || null, gps: gps || null,
-    alt: null, caption: null, keywords: [], place: null, quality: null, storyIdeas: [],
-    analyzed: false, hasOriginal: false, addedAt: new Date().toISOString(),
-  };
-  mediaStore.update((m) => ({ items: [record, ...m.items] }));
-  res.json({ item: record });
-}));
-
-app.get('/api/media/:id/thumb', (req, res) => {
-  const buf = readMediaFile(req.params.id, 'thumb');
-  if (!buf) return res.status(404).end();
-  res.type('image/jpeg').send(buf);
-});
-
-// Full-size download: the strongest stored copy of an item (the real
-// video file when the original was uploaded, the full-resolution frame
-// otherwise). The filename comes from the alt text so it carries
-// keywords wherever the file lands next.
-app.get('/api/media/:id/file', (req, res) => {
-  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
-  if (!item) return res.status(404).end();
-  const slug = String(item.alt || item.caption || item.name || 'media')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'media';
-  if (item.kind === 'video') {
-    const original = mediaPath(item.id, 'original');
-    if (fs.existsSync(original)) {
-      const nameExt = String(item.name || '').split('.').pop().toLowerCase();
-      const ext = /^[a-z0-9]{2,4}$/.test(nameExt) ? nameExt : 'mp4';
-      res.set('Content-Disposition', `attachment; filename="${slug}.${ext}"`);
-      return res.type(item.mime || 'video/mp4').sendFile(original);
-    }
-  }
-  const buf = readMediaFile(item.id, 'render') || readMediaFile(item.id, 'analysis') || readMediaFile(item.id, 'thumb');
-  if (!buf) return res.status(404).end();
-  res.set('Content-Disposition', `attachment; filename="${slug}.jpg"`);
-  res.type('image/jpeg').send(buf);
-});
-
-// Muted video download: same original footage, audio track removed on the fly.
-// Only available for video items that have an original stored on disk.
-app.get('/api/media/:id/file/muted', (req, res) => {
-  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
-  if (!item || item.kind !== 'video') return res.status(404).end();
-  const original = mediaPath(item.id, 'original');
-  if (!fs.existsSync(original)) return res.status(404).end();
-  const slug = String(item.alt || item.caption || item.name || 'media')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'media';
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Content-Disposition', `attachment; filename="${slug}-muted.mp4"`);
-  const proc = spawn(ffmpegPath(), [
-    '-i', original,
-    '-c:v', 'copy', '-an',
-    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov',
-    'pipe:1',
-  ], { stdio: ['ignore', 'pipe', 'ignore'] });
-  proc.stdout.pipe(res);
-  res.on('close', () => proc.kill());
-  proc.on('error', () => { try { res.end(); } catch { /* ignore */ } });
-});
-
-// Original video upload: the browser streams the untouched file here after
-// import so Auto-Produce can cut real moving clips into b-roll. Streamed
-// straight to disk (never buffered in memory) with a hard size cap.
-const MAX_ORIGINAL_BYTES = 500 * 1024 * 1024;
-app.post('/api/media/:id/original', (req, res) => {
-  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
-  if (!item) return res.status(404).json({ error: 'not found' });
-  if (item.kind !== 'video') return res.status(400).json({ error: 'originals are only stored for videos' });
-  const declared = Number(req.headers['content-length'] || 0);
-  if (declared > MAX_ORIGINAL_BYTES) {
-    return res.status(413).json({ error: 'video is larger than the 500MB per-file limit' });
-  }
-  const file = mediaPath(item.id, 'original');
-  const partial = `${file}.part`;
-  const out = fs.createWriteStream(partial);
-  let received = 0;
-  let failed = false;
-  const abort = (code, message) => {
-    if (failed) return;
-    failed = true;
-    out.destroy();
-    fs.rm(partial, { force: true }, () => {});
-    req.destroy();
-    if (!res.headersSent) res.status(code).json({ error: message });
-  };
-  req.on('data', (chunk) => {
-    received += chunk.length;
-    if (received > MAX_ORIGINAL_BYTES) abort(413, 'video is larger than the 500MB per-file limit');
-  });
-  req.on('error', () => abort(400, 'upload interrupted'));
-  out.on('error', () => abort(500, 'could not write the video to disk'));
-  out.on('finish', () => {
-    if (failed) return;
-    fs.rename(partial, file, (err) => {
-      if (err) return abort(500, 'could not store the video');
-      mediaStore.update((m) => ({
-        items: m.items.map((i) => (i.id === item.id ? { ...i, hasOriginal: true } : i)),
-      }));
-      res.json({ ok: true, bytes: received });
-    });
-  });
-  req.pipe(out);
-});
-
-app.post('/api/media/:id/analyze', wrap(async (req, res) => {
-  const item = mediaStore.get().items.find((i) => i.id === req.params.id);
-  if (!item) return res.status(404).json({ error: 'not found' });
-  const buf = readMediaFile(item.id, 'analysis') || readMediaFile(item.id, 'thumb');
-  if (!buf) return res.status(400).json({ error: 'no analyzable frame stored for this item' });
-  const result = await analyzeMedia({
-    b64: buf.toString('base64'), name: item.name, kind: item.kind,
-    takenAt: item.takenAt, profile: stateStore.get().profile,
-  });
-  Object.assign(item, {
-    alt: result.alt || item.alt,
-    caption: result.caption || item.caption,
-    keywords: result.keywords || [],
-    place: result.place || null,
-    quality: result.quality || null,
-    storyIdeas: result.storyIdeas || [],
-    analyzed: true,
-  });
-  mediaStore.update((m) => ({ items: m.items.map((i) => (i.id === item.id ? item : i)) }));
-  res.json({ item });
-}));
-
-app.patch('/api/media/:id', (req, res) => {
-  let updated = null;
-  mediaStore.update((m) => ({
-    items: m.items.map((i) => (i.id === req.params.id ? (updated = { ...i, ...req.body, id: i.id }) : i)),
-  }));
-  if (!updated) return res.status(404).json({ error: 'not found' });
-  res.json({ item: updated });
-});
-
-app.delete('/api/media/:id', (req, res) => {
-  deleteMediaFiles(req.params.id);
-  mediaStore.update((m) => ({ items: m.items.filter((i) => i.id !== req.params.id) }));
-  res.json({ ok: true });
-});
+// ---- media, ingest, moderation, albums (lib/media-routes.js) -------------
+// Everything below is scoped to the requesting workspace's library. Held and
+// unscreened items never reach the package, render or publish paths.
+registerMediaRoutes(app, { wrap, stateStore, ffmpegPath });
 
 // ---- strategy ------------------------------------------------------------
 
@@ -948,7 +797,7 @@ app.post('/api/generate', wrap(async (req, res) => {
       const fromTrip = mediaInTrip(all, trip);
       const pool = fromTrip.length >= 3 ? fromTrip : all;
       mediaFromTrip = fromTrip.length >= 3 ? fromTrip.length : 0;
-      const sel = await selectMedia({ profile, topic, angle, pillar, items: pool, count: quick ? 3 : 8 });
+      const sel = await selectMedia({ profile, topic, angle, pillar, items: withAlbumContext(pool, currentLibrary()), count: quick ? 3 : 8 });
       media = mediaStore.get().items.filter((m) => sel.ids.includes(m.id));
       mediaSelection = sel;
     }
@@ -994,7 +843,9 @@ app.get('/api/packages', (req, res) => {
 app.get('/api/packages/:id', (req, res) => {
   const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
   if (!pkg) return res.status(404).json({ error: 'not found' });
-  res.json({ package: pkg });
+  // mediaStatus lets the Publish Run page leave out anything held or
+  // unscreened: the last gate before a file reaches a platform.
+  res.json({ package: pkg, mediaStatus: mediaStatusFor([...(pkg.mediaIds || []), ...((pkg.carouselPlan?.slides || []).map((x) => x.mediaId))]) });
 });
 
 // Hand-polished chapter titles flow back into the render record (and from
@@ -1290,7 +1141,7 @@ app.delete('/api/packages/:id', (req, res) => {
 // ---- auto-produce (finished video rendering) -----------------------------
 
 app.post('/api/render', wrap(async (req, res) => {
-  const { packageId, platformId, voiceId, orientation, avatar, delivery, music } = req.body;
+  const { packageId, platformId, voiceId, orientation, avatar, delivery, resolution, music } = req.body;
   const pkg = packageStore.get().items.find((p) => p.id === packageId);
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   const fields = pkg.platforms?.[platformId]?.fields;
@@ -1317,10 +1168,15 @@ app.post('/api/render', wrap(async (req, res) => {
     orientation: orientation || (platformId === 'youtube_long' ? 'landscape' : 'portrait'),
     avatar: avatar || null,
     delivery: delivery || null,
+    resolution: resolution === '4k' ? '4k' : 'hd',
     music: musicOpts,
   });
   res.json({ renderId });
 }));
+
+// Static path before '/api/render/:id'. What this server can render: 4K needs
+// memory, so the UI offers it only where it is safe.
+app.get('/api/render/capabilities', (req, res) => res.json(renderCapabilities()));
 
 app.get('/api/render/:id', (req, res) => {
   const job = renderJob(req.params.id);
@@ -1481,7 +1337,7 @@ app.post('/api/packages/:id/media', wrap(async (req, res) => {
   if (!ids.length) {
     const pillar = (state.profile.pillars || []).find((p) => p.id === pkg.pillarId) || null;
     const sel = await selectMedia({
-      profile: state.profile, topic: pkg.topic, angle: pkg.angle, pillar, items,
+      profile: state.profile, topic: pkg.topic, angle: pkg.angle, pillar, items: withAlbumContext(items, currentLibrary()),
       count: Math.min(12, Math.max(1, Number(req.body?.count) || 8)),
     });
     ids = sel.ids;
@@ -1523,7 +1379,7 @@ app.post('/api/packages/:id/carousel-media', wrap(async (req, res) => {
   const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
   const profile = stateStore.get().profile;
-  const { slides, mode, error } = await matchCarouselSlides({ profile, pkg, items: mediaStore.get().items });
+  const { slides, mode, error } = await matchCarouselSlides({ profile, pkg, items: withAlbumContext(mediaStore.get().items, currentLibrary()) });
   let updated = null;
   packageStore.update((s) => ({
     items: s.items.map((p) => {
@@ -1984,6 +1840,15 @@ scheduleBackups();
 schedulePlan();
 measureLib.scheduleMeasure();
 trendLib.scheduleTrends();
+
+// The photo catalog and albums write on a multi-second debounce (they can be
+// large), so flush them when the platform stops the process on a deploy.
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    try { catalog.flush(); albumStore.flush(); stateStore.flush(); packageStore.flush(); } catch { /* best effort */ }
+    process.exit(0);
+  });
+}
 
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {

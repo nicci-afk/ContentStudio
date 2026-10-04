@@ -1,0 +1,7 @@
+# Python 3.10+ (brew install python@3.12). ffmpeg is a separate install:
+#   brew install ffmpeg
+osxphotos>=0.77
+nudenet>=3.4
+pillow>=10.0
+pillow-heif>=0.16
+requests>=2.31

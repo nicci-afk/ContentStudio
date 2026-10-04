@@ -152,7 +152,7 @@ export function renderPublish(root, params = null) {
 }
 
 async function draw(container, pkgId) {
-  const [{ package: pkg }, renders] = await Promise.all([
+  const [{ package: pkg, mediaStatus }, renders] = await Promise.all([
     api.pkg(pkgId),
     api.packageRenders(pkgId).then((r) => r.items).catch(() => []),
   ]);
@@ -164,7 +164,7 @@ async function draw(container, pkgId) {
 
   const cards = el('div', {});
   const drawCards = () => {
-    cards.replaceChildren(...ordered.map((id) => platformCard(pkg, id, specs[id], renders, drawCards)));
+    cards.replaceChildren(...ordered.map((id) => platformCard(pkg, id, specs[id], renders, drawCards, mediaStatus || {})));
   };
 
   container.replaceChildren(
@@ -233,8 +233,12 @@ function publishingProfileBlock(onSaved) {
     el('div', { class: 'row gap wrap' }, identity, companyUrl, save));
 }
 
-function mediaLinks(pkg, platformId, spec, renders) {
+function mediaLinks(pkg, platformId, spec, renders, mediaStatus = {}) {
   const links = [];
+  // Last gate before a file reaches a platform: held or unscreened media is
+  // never offered. 'legacy' (predates screening) and 'clear' pass.
+  const usable = (id) => ['clear', 'legacy', undefined].includes(mediaStatus[id]);
+  const skipped = [];
   const slug = (pkg.topic || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
   if (spec?.group === 'video') {
     const src = pkg.platforms?.[platformId]?.sharedVideoWith || platformId;
@@ -252,8 +256,10 @@ function mediaLinks(pkg, platformId, spec, renders) {
   }
   if (platformId === 'instagram_carousel' && pkg.carouselPlan?.slides?.length) {
     for (const s of pkg.carouselPlan.slides) {
+      if (!usable(s.mediaId)) { skipped.push(s.mediaId); continue; }
       links.push({ label: `⬇ slide ${s.n} image`, href: `/api/media/${s.mediaId}/file`, download: `slide-${s.n}.jpg` });
     }
+    if (skipped.length) links.unshift({ label: `${skipped.length} slide image(s) are held or not yet screened and were left out. Review them in the Library.`, href: null });
     return links;
   }
   // Every other surface still needs a picture: an article cover, a post
@@ -266,6 +272,7 @@ function mediaLinks(pkg, platformId, spec, renders) {
   // asset by what it actually is instead.
   let imgCount = 0;
   for (const id of (pkg.mediaIds || []).slice(0, 8)) {
+    if (!usable(id)) { skipped.push(id); continue; }
     const alt = pkg.altTexts?.[id] || '';
     const kind = pkg.mediaKinds?.[id]; // absent on packages built before this field existed
     if (kind === 'video') {
@@ -285,6 +292,9 @@ function mediaLinks(pkg, platformId, spec, renders) {
       alt,
     });
   }
+  if (skipped.length) {
+    links.unshift({ label: `${skipped.length} attached item(s) are held or not yet screened and were left out. Review them in the Library.`, href: null });
+  }
   if (!imgCount && links.length) {
     links.unshift({
       label: 'No still image attached, only video. Pick media from the Library first if this platform needs a photo.',
@@ -294,9 +304,9 @@ function mediaLinks(pkg, platformId, spec, renders) {
   return links;
 }
 
-function platformCard(pkg, platformId, spec, renders, refresh) {
+function platformCard(pkg, platformId, spec, renders, refresh, mediaStatus = {}) {
   const posted = pkg.publishedUrls?.[platformId] || null;
-  const media = mediaLinks(pkg, platformId, spec, renders);
+  const media = mediaLinks(pkg, platformId, spec, renders, mediaStatus);
   const fields = [];
   for (const f of spec?.fields || []) {
     const value = fieldText(pkg.platforms[platformId]?.fields?.[f.key]);

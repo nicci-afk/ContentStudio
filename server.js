@@ -18,7 +18,7 @@ if (fs.existsSync(envFile)) {
 
 const { stateStore, mediaStore, packageStore, tripStore, uid, saveMediaFile, readMediaFile, deleteMediaFiles, mediaPath,
   listWorkspaces, createWorkspace, renameWorkspace, deleteWorkspace,
-  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, setWorkspaceLibrary,
+  listSnapshots, restoreSnapshot, readWorkspace, runWithWorkspace, workspaceExists, rememberUserWorkspace, workspaceForEmail, setWorkspaceLibrary,
   leadStore, ledgerStore, findWorkspaceByLeadKey, findWorkspaceByCaptureId, findLeadByToken } =
   await import('./lib/store.js');
 const { platformList, PLATFORMS } = await import('./lib/platforms.js');
@@ -45,7 +45,7 @@ const { normalizeTrip, upsertTrips, tripStatus, pickTrip, tripContextBlock, medi
 const { EVENT_SIZES, EVENT_TIMINGS, leadChannel, upsertLead, notifyLead, sendLeadToMeta, leadSummary, leadStatuses, newLeadKey, buildAppsScript, sendResourceEmail, nextSequenceStep, inSendWindow, sendSequenceEmail } = await import('./lib/leads.js');
 const { loadManifest, findResource, resourcePath } = await import('./lib/resources.js');
 
-const { registerAuthRoutes, authMiddleware } = await import('./lib/auth.js');
+const { registerAuthRoutes, authMiddleware, sessionEmail } = await import('./lib/auth.js');
 
 const app = express();
 
@@ -66,7 +66,8 @@ const setWsCookie = (res, id) =>
 app.use((req, res, next) => {
   const fromCookie = (req.headers.cookie || '').split(';').map((c) => c.trim())
     .find((c) => c.startsWith(`${WS_COOKIE}=`))?.slice(WS_COOKIE.length + 1);
-  const id = String(req.headers['x-workspace'] || fromCookie || '');
+  const email = sessionEmail(req);
+  const id = String(req.headers['x-workspace'] || fromCookie || (email && workspaceForEmail(email)) || '');
   if (id && workspaceExists(id)) return runWithWorkspace(id, next);
   next();
 });
@@ -131,6 +132,7 @@ app.get('/api/workspaces', (req, res) => res.json(listWorkspaces()));
 app.post('/api/workspaces', (req, res) => {
   const id = createWorkspace(req.body?.name, req.body?.library);
   setWsCookie(res, id);
+  rememberUserWorkspace(sessionEmail(req), id);
   runWithWorkspace(id, () => res.json(listWorkspaces()));
 });
 
@@ -139,6 +141,7 @@ app.post('/api/workspaces', (req, res) => {
 app.post('/api/workspaces/:id/activate', (req, res) => {
   if (!workspaceExists(req.params.id)) return res.status(404).json({ error: 'unknown workspace' });
   setWsCookie(res, req.params.id);
+  rememberUserWorkspace(sessionEmail(req), req.params.id);
   runWithWorkspace(req.params.id, () => res.json(listWorkspaces()));
 });
 
@@ -1763,6 +1766,11 @@ app.get('/api/youtube/callback', wrap(async (req, res) => {
   }
 }));
 
+app.put('/api/youtube/app', (req, res) => {
+  try { gLib.saveOwnApp(req.body || {}); } catch (err) { return res.status(400).json({ error: err.message }); }
+  res.json({ ok: true, config: gLib.googleConfig(), connected: gLib.isConnected() });
+});
+app.delete('/api/youtube/app', (req, res) => { gLib.clearOwnApp(); res.json({ ok: true, config: gLib.googleConfig(), connected: false }); });
 app.post('/api/youtube/disconnect', (req, res) => { gLib.disconnect(); res.json({ ok: true }); });
 
 app.get('/api/youtube/channel-audit', wrap(async (req, res) => {

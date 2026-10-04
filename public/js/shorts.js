@@ -148,6 +148,27 @@ async function drawHome(container) {
     insightsCard());
 }
 
+// A separate company can use its OWN Google Cloud project instead of the shared
+// server one. The secret is stored for this business only and never shown again.
+function ownAppForm(st, redraw) {
+  const id = el('input', { type: 'text', placeholder: 'Client ID (ends in .apps.googleusercontent.com)', autocomplete: 'off', style: 'width:100%' });
+  const secret = el('input', { type: 'password', placeholder: 'Client secret', autocomplete: 'off', style: 'width:100%' });
+  const body = [
+    el('p', { class: 'muted', style: 'margin:0 0 6px' }, st.config.own
+      ? `This business uses its own Google app (${st.config.ownClientId}).`
+      : 'Optional: this business can use its own Google Cloud project instead of the shared one. Create a Web application client there, add this redirect URI, then paste the client ID and secret here.'),
+    el('pre', { class: 'asset-value code' }, st.redirectUri),
+    id, secret,
+    el('div', { class: 'row gap', style: 'margin-top:6px' },
+      el('button', { class: 'btn btn-ghost btn-xs', onclick: async (e) => {
+        e.target.disabled = true;
+        try { await api.youtubeSaveApp(id.value, secret.value); toast('Saved. Now connect YouTube.', 'ok'); redraw(); } catch (err) { toast(err.message, 'err'); e.target.disabled = false; }
+      } }, 'Save this business\'s Google app'),
+      st.config.own ? el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => { if (confirm('Go back to the shared Google app?')) { await api.youtubeClearApp(); redraw(); } } }, 'Use the shared app') : null),
+  ];
+  return el('details', { style: 'margin-top:10px' }, el('summary', { class: 'muted' }, 'This business\'s own Google app'), ...body);
+}
+
 // ---- channel connection, results across Shorts, insights, channel audit -----
 
 function insightsCard() {
@@ -172,6 +193,7 @@ function insightsCard() {
           el('button', { class: 'btn btn-ghost btn-xs', onclick: async (e) => { e.target.disabled = true; try { const a = await api.channelAudit(); auditBox.replaceChildren(...auditView(a)); } catch (err) { toast(err.message, 'err'); } e.target.disabled = false; } }, 'Audit the channel'),
           el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => { if (confirm('Disconnect YouTube for this business?')) { await api.youtubeDisconnect(); draw(); } } }, 'Disconnect'))));
     }
+    if (!ov.connected) kids.push(ownAppForm(st, draw));
     const auditBox = el('div', {});
     kids.push(auditBox);
     if (ov.videos.length) {

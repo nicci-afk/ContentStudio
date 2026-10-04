@@ -140,7 +140,7 @@ async function drawTrends(body) {
   body.replaceChildren(
     el('div', { class: 'card' },
       el('h2', {}, 'Trend watch'),
-      el('p', { class: 'muted', style: 'margin:0 0 8px' }, 'Reads public YouTube Shorts in your niche from the last two weeks (titles, lengths, how fast views are growing, hashtags) and finds the patterns. It stores only that public information, never anyone\'s video, and every idea is an original one for you to film from your own trips. Instagram and TikTok do not offer a public trend feed, so for those, add a pattern from a reel you like on the Templates tab.'),
+      el('p', { class: 'muted', style: 'margin:0 0 8px' }, 'Reads public YouTube Shorts in your niche from the last two weeks (titles, lengths, how fast views are growing, hashtags) and finds the patterns. It stores only that public information, never anyone\'s video, and every idea is an original one for you to film from your own real work. Instagram and TikTok do not offer a public trend feed, so for those, add a pattern from a reel you like on the Templates tab.'),
       st.canFetch ? null : el('p', { class: 'warn' }, 'Set YOUTUBE_API_KEY on the server (or connect YouTube on the Reel to Short page) to turn this on.'),
       field('What to watch (one search per line)', queries, 'Starts from your niche, place and pillars.'),
       el('div', { class: 'row gap wrap' }, autoBtn,
@@ -162,7 +162,7 @@ async function drawTrends(body) {
       el('span', { class: 'field-label' }, 'Hashtags'),
       el('div', { class: 'chip-row' }, t.patterns.hashtags.map((x) => el('span', { class: 'chip' }, x)))) : null,
     t.patterns?.ideas?.length ? el('div', { class: 'card' },
-      el('h2', {}, 'Ideas you could film from your own trips'),
+      el('h2', {}, 'Ideas you could film from your own real work'),
       t.patterns.ideas.map((i) => el('div', { class: 'asset-field' },
         el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, i.title),
           el('button', {

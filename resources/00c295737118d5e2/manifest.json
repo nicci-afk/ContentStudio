@@ -1,0 +1,91 @@
+{
+  "person": "Nicci Grotefendt",
+  "legalName": "Travel GHR",
+  "senderAddress": "1012 North Main Street, Edwardsville, IL 62025",
+  "applyUrl": "https://consciouscreator.app/apply",
+  "lookInsideUrl": "https://consciouscreator.app/look-inside",
+  "resources": [
+    {
+      "slug": "destination-story-planner",
+      "title": "Destination Story Planner",
+      "file": "destination-story-planner.pdf",
+      "subject": "Your Destination Story Planner",
+      "buttonLabel": "Download the planner",
+      "emailIntro": "Here is the Destination Story Planner you asked for. It walks you through turning one trip you have taken into four weeks of content in your own voice.",
+      "emailNote": "Pick one trip, write quickly, and polish later. If a question stops you, reply and tell me where."
+    },
+    {
+      "slug": "advisor-starter-guide",
+      "title": "Relationship-Driven Advisor Starter Guide",
+      "file": "advisor-starter-guide.pdf",
+      "subject": "Your Relationship-Driven Advisor Starter Guide",
+      "buttonLabel": "Download the guide",
+      "emailIntro": "Here is the Relationship-Driven Advisor Starter Guide you asked for. It covers how to build trusted relationships with local partners and how to turn them into trips your clients ask for.",
+      "emailNote": "Start with the questions on page 3 and try them in your next conversation with a partner. I would love to hear what you learn."
+    },
+    {
+      "slug": "look-inside",
+      "title": "Look Inside The Conscious Creator",
+      "file": "look-inside.pdf",
+      "subject": "A Look Inside The Conscious Creator",
+      "buttonLabel": "Download the overview",
+      "emailIntro": "Here is the look inside The Conscious Creator that you asked for: five days in Akumal and Tulum, February 8 to 12, 2027, with the people and places behind them.",
+      "emailNote": "Seats are limited and selected by application. If it feels like a fit, I would be glad to read yours."
+    }
+  ],
+  "sequence": [
+    {
+      "day": 2,
+      "subject": "The grocery bagger in Playa del Carmen",
+      "paragraphs": [
+        "On a trip to Playa del Carmen, a friend who lives there walked me through a local grocery store and explained something I would never have found on my own. The baggers work for free. They are senior citizens who volunteer so that shoppers' tips become their income, a quiet program that keeps elders engaged and supported.",
+        "That moment showed me the difference between recommending a place and standing inside it. It is why I build trips around relationships with the people who live there.",
+        "If you have a moment like that from your own travels, I would love to hear it. Reply and tell me about it."
+      ],
+      "ps": "The thinking behind this is on the philosophy page: https://consciouscreator.app/philosophy"
+    },
+    {
+      "day": 5,
+      "subject": "Three questions for your next local partner",
+      "paragraphs": [
+        "A good relationship starts with a good question. Here are three from the starter guide that you can use this week:",
+        {
+          "ol": [
+            "What do you most want a guest to understand before they arrive?",
+            "How do you work with people in your community, and how can guests support them?",
+            "Who else in your community do you trust and recommend?"
+          ]
+        },
+        "Write the answers in their words, and ask before you share them. If you try one, reply and tell me what you learned."
+      ],
+      "ps": "A look inside five days built around this way of working: https://consciouscreator.app/look-inside"
+    },
+    {
+      "day": 9,
+      "subject": "Five days in Akumal and Tulum",
+      "paragraphs": [
+        "In February 2027, fifty travel advisors will spend five days in Akumal and Tulum, February 8 to 12.",
+        "A private villa with onsite chefs. A private catamaran day along the reef. Four cenotes, zip lines, and a Mayan village with Living Dreams Mexico. The Sian Ka'an Biosphere by freshwater channel. And hands-on workshops with Nathan Riddle and Kha Ly on storytelling and publishing in your own voice.",
+        "Everything in the seat is included, and optional extras are available on request. Seats are selected by application. If it sounds like a fit, I would be glad to read yours: https://consciouscreator.app/apply"
+      ]
+    },
+    {
+      "day": 14,
+      "subject": "Is it a fit?",
+      "paragraphs": [
+        "Selection is intentionally narrow, and it reads for purpose. It may be a fit if:",
+        {
+          "ul": [
+            "You are a travel advisor or agency owner with real intent to build authority in your own voice.",
+            "You are willing to do creative work in destination: capture, edit, post, refine.",
+            "You believe relationships with local people make a better client experience.",
+            "You can say why you want this education and how you will apply it.",
+            "You arrive with humility and curiosity."
+          ]
+        },
+        "If that sounds like you, tell us who you serve and what you are building: https://consciouscreator.app/apply",
+        "Whether or not you apply, I am glad you are here."
+      ]
+    }
+  ]
+}

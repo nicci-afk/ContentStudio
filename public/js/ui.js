@@ -1,3 +1,14 @@
+// The DOM's replaceChildren, append and prepend turn null and false into the
+// literal text "null" or "false". Conditional children (cond ? node : null)
+// are everywhere in these views, so drop them once here instead of at every
+// call site (the same trap bit the produce panel and the Reel to Short page).
+for (const name of ['replaceChildren', 'append', 'prepend']) {
+  const original = Element.prototype[name];
+  Element.prototype[name] = function patched(...nodes) {
+    return original.apply(this, nodes.flat(Infinity).filter((n) => n != null && n !== false));
+  };
+}
+
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {

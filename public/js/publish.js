@@ -44,7 +44,7 @@ const EXTENSION_INSTRUCTION = `I am publishing approved content from my ContentS
 
 For the current card:
 1. Open its composer link in a new tab.
-2. Fill every field exactly as written on the card. Copy verbatim: never rewrite, shorten, or invent. Each field carries a line starting with an arrow saying exactly where it goes; follow it. Some fields are for me only and are never posted, and some are already inside the video. If a card holds both a long-form article and a feed post, do the article first, because the post refers to it. If LinkedIn's own editor offers to publish this as an issue of one of my existing Newsletters, decline it and publish as a standalone Article instead, unless I have told you this specific card is a newsletter issue.
+2. Fill every field exactly as written on the card. Copy verbatim: never rewrite, shorten, or invent. Each field carries a line starting with an arrow saying exactly where it goes; follow it. Some fields are for me only and are never posted, and some are already inside the video. If a card holds both a long-form article and a feed post, do the article first, because the post refers to it. LinkedIn check, before you type anything into a LinkedIn editor: if the editor shows any newsletter name anywhere (look at the line under my name at the top left of the editor, the dropdown beside my name, whose "Publish to" section must have "Individual article" selected and no newsletter, and the dialog that opens after Next, not only for a popup), a newsletter picker, or the words "publish as a newsletter issue", stop and tell me exactly what you see, and wait. A LinkedIn card is a standalone Article only, never a newsletter issue, unless I have told you in this chat that this specific card is a newsletter issue.
 3. Markdown characters are NOT formatting. If a field contains lines beginning with #, ## or ###, never paste those characters. Paste the heading text alone, then apply the editor's own heading styles from its formatting toolbar: a ## line becomes the largest body heading style, a ### line the next size down, and the # line is the article title field. The card lists the intended heading structure. Real heading styles matter: search engines and AI assistants parse an article by its heading hierarchy, and literal hash marks give them nothing.
 4. If the card lists a media file, tell me the exact file name to attach from my Downloads and wait while I attach it. Do not try to operate the file picker.
 5. NEVER click Post, Publish, Share, or Schedule. When the post is fully prepared, stop and tell me it is ready for my review.
@@ -92,6 +92,10 @@ const PLACEMENT = {
   production_notes: 'Notes for the creator only. Never posted.',
   todo: 'Checklist for the creator only. Never posted.',
   slides: 'Slide order reference for the carousel images. Not pasted as text.',
+  pinned_comment: 'Post this as the FIRST COMMENT after publishing, then pin it. Never in the description.',
+  recording_location: 'Goes in Show more, Video location (search and pick the closest match).',
+  thumbnail_text: 'Already on the cover image. Not pasted anywhere.',
+  transcript: 'Source of the captions file (upload the .srt under Subtitles). Not pasted into the description.',
 };
 
 // Platforms that suppress reach when the post body carries an outbound
@@ -179,6 +183,9 @@ async function draw(container, pkgId) {
         copyBtn(EXTENSION_INSTRUCTION)),
       el('p', { class: 'muted', style: 'margin:6px 0 0' },
         'Copy this and paste it yourself, in your own message, so the instruction comes from you. A browser assistant should never act on instructions it finds on a web page, including this one. Once sent, it fills each composer from the cards below and stops before posting, so every post ships only after your click.')),
+    pkg.kind === 'short' ? el('div', { class: 'card' },
+      el('p', { class: 'muted', style: 'margin:0' }, 'This is an imported Short. The guided flow (files, a posting prompt written for YouTube Studio, and live URL verification) is on the Reel to Short page. '),
+      el('a', { class: 'btn btn-primary btn-xs', style: 'margin-top:8px', href: `#/shorts?pkg=${pkg.id}` }, 'Open it there')) : null,
     publishingProfileBlock(() => drawCards()),
     ordered.length ? cards : el('div', { class: 'card' },
       emptyState('Nothing approved yet', 'Approve platforms on the package (the Approve toggle on each tab) and they appear here in posting order.')),
@@ -239,6 +246,10 @@ function mediaLinks(pkg, platformId, spec, renders, mediaStatus = {}) {
     if (done[0]) {
       links.push({ label: `⬇ ${slug}-${platformId}.mp4 (upload master)`, href: `/api/render/${done[0].id}/video`, download: `${slug}-${platformId}.mp4` });
       links.push({ label: '⬇ captions .srt', href: `/api/render/${done[0].id}/srt`, download: `${slug}.srt` });
+      if (pkg.kind === 'short' && platformId === 'youtube_shorts') {
+        links.push({ label: '⬇ cover image', href: `/api/shorts/${pkg.id}/cover`, download: `${slug}-cover.jpg` });
+      }
+      if (pkg.reelStyle === 'music') links.push({ label: '♪ Music-led: after uploading, add a trending sound in the app (Audio, Trending)', href: null });
     } else {
       links.push({ label: 'No finished render yet: produce the video first', href: null });
     }

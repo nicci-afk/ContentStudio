@@ -27,6 +27,24 @@ export const api = {
   setWorkspaceLibrary: (id, library) => send('PATCH', `/api/workspaces/${id}`, { library }),
   renameWorkspace: (id, name) => send('PATCH', `/api/workspaces/${id}`, { name }),
   deleteWorkspace: (id) => send('DELETE', `/api/workspaces/${id}`),
+  leads: () => get('/api/leads'),
+  trips: () => get('/api/trips'),
+  upsertTrips: (trips) => send('POST', '/api/trips/upsert', { trips }),
+  updateTrip: (id, body) => send('PUT', `/api/trips/${id}`, body),
+  deleteTrip: (id) => send('DELETE', `/api/trips/${id}`),
+  parseTripsIcs: (ics) => send('POST', '/api/trips/ics', { ics }),
+  leadSetup: () => get('/api/leads/setup'),
+  leadSettings: (patch) => send('PUT', '/api/leads/settings', patch),
+  leadSequenceTest: (day) => send('POST', '/api/leads/sequence/test', { day }),
+  leadUpdate: (id, patch) => send('PATCH', `/api/leads/${id}`, patch),
+  leadDelete: (id) => send('DELETE', `/api/leads/${id}`),
+  ledger: () => get('/api/ledger'),
+  ledgerQuestions: (questions) => send('PUT', '/api/ledger/questions', { questions }),
+  ledgerSettings: (patch) => send('PUT', '/api/ledger/settings', patch),
+  ledgerSuggest: () => send('POST', '/api/ledger/suggest', {}),
+  ledgerRun: () => send('POST', '/api/ledger/run', {}),
+  ledgerManual: (entry) => send('POST', '/api/ledger/manual', entry),
+  ledgerDeleteRun: (id) => send('DELETE', `/api/ledger/runs/${id}`),
   state: () => get('/api/state'),
   saveState: (state) => withWarnings(send('PUT', '/api/state', state)),
   patchState: (path, value) => withWarnings(send('PATCH', '/api/state', { path, value })),
@@ -100,6 +118,80 @@ export const api = {
   packageRenders: (pkgId) => get(`/api/packages/${pkgId}/renders`),
   cutClips: (renderId) => send('POST', `/api/render/${renderId}/clips`, {}),
   clipsStatus: (jobId) => get(`/api/render/clips/${jobId}`),
+
+  shortsRelated: (pkgId) => get(`/api/shorts/related${pkgId ? `?pkg=${pkgId}` : ''}`),
+  shortsCreate: (body) => send('POST', '/api/shorts', body),
+  shortsProcess: (id, mode, opts) => send('POST', `/api/shorts/${id}/process`, { mode, opts }),
+  shortsStatus: (id) => get(`/api/shorts/${id}/status`),
+  shortsCover: (id, body) => send('POST', `/api/shorts/${id}/cover`, body),
+  shortsPrompt: (id) => get(`/api/shorts/${id}/prompt`),
+  shortsEmbedKit: (id) => get(`/api/shorts/${id}/embed-kit`),
+  shortsVerify: (id) => send('POST', `/api/shorts/${id}/verify`, {}),
+  shortsDeleteSource: (id) => send('POST', `/api/shorts/${id}/source/delete`, {}),
+  // XHR rather than fetch so the browser can report upload progress.
+  shortsUpload: (id, file, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/shorts/${id}/source`);
+    xhr.setRequestHeader('content-type', file.type || 'video/mp4');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* not json */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(new Error(body.error || `upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('upload interrupted'));
+    xhr.send(file);
+  }),
+
+  youtubeStatus: () => get('/api/youtube/status'),
+  youtubeDisconnect: () => send('POST', '/api/youtube/disconnect', {}),
+  channelAudit: () => get('/api/youtube/channel-audit'),
+  measureOverview: () => get('/api/measure/overview'),
+  measureInsights: () => send('POST', '/api/measure/insights', {}),
+  resultsCheck: (id) => send('POST', `/api/packages/${id}/results/check`, {}),
+  resultsManual: (id, body) => send('POST', `/api/packages/${id}/results/manual`, body),
+  shortsConsent: (id) => send('POST', `/api/shorts/${id}/consent`, { faces: true, rights: true }),
+  shortsTranslate: (id, languages) => send('POST', `/api/shorts/${id}/translate`, { languages }),
+  shortsReplies: (id, comments) => send('POST', `/api/shorts/${id}/replies`, { comments }),
+
+  edits: () => get('/api/edits'),
+  createEdit: (body) => send('POST', '/api/edits', body),
+  edit: (id) => get(`/api/edits/${id}`),
+  saveEdit: (id, body) => send('PUT', `/api/edits/${id}`, body),
+  deleteEdit: (id) => send('DELETE', `/api/edits/${id}`),
+  planEdit: (id, body) => send('POST', `/api/edits/${id}/plan`, body),
+  editBeats: (id, assetId, snap) => send('POST', `/api/edits/${id}/beats`, { assetId, snap }),
+  renderEdit: (id) => send('POST', `/api/edits/${id}/render`, {}),
+  editSocial: (id) => send('POST', `/api/edits/${id}/social`, {}),
+  editToShort: (id) => send('POST', `/api/edits/${id}/to-short`, {}),
+  templates: () => get('/api/templates'),
+  saveTemplate: (body) => send('POST', '/api/templates', body),
+  deleteTemplate: (id) => send('DELETE', `/api/templates/${id}`),
+  trends: () => get('/api/trends'),
+  refreshTrends: () => send('POST', '/api/trends/refresh', {}),
+  trendSettings: (body) => send('PUT', '/api/trends/settings', body),
+  // Generic streamed upload with progress (assets, reference reels).
+  uploadFile: (url, file, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('content-type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* not json */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(new Error(body.error || `upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('upload interrupted'));
+    xhr.send(file);
+  }),
+
+  plan: () => get('/api/plan'),
+  savePlan: (plan) => send('PUT', '/api/plan', plan),
+  runPlan: (itemId) => send('POST', '/api/plan/run', itemId ? { itemId } : {}),
+  planRunStatus: (id) => get(`/api/plan/run/${id}`),
+  planQueue: () => get('/api/plan/queue'),
 
   avatars: () => get('/api/avatar/avatars'),
   avatarVoices: () => get('/api/avatar/voices'),

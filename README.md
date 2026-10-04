@@ -93,6 +93,16 @@ Every business gets its own isolated workspace — profile, interview, voice DNA
 | GET / DELETE | `/api/packages/:id` | Full package / remove |
 | POST | `/api/packages/:id/rescore` | Re-run rubric + JSON-LD |
 
+### Content Plan (autopilot drafting; off by default, drafts only)
+| Method | Path | Description |
+|---|---|---|
+| GET / PUT | `/api/plan` | Active workspace's plan: `{enabled, facts[], items[]}` (topic status and run times are server-owned) |
+| POST | `/api/plan/run` | `{itemId?}` drafts the next queued topic(s) into the approval queue → `{jobId}`; `{ran:false, reason}` when switched off |
+| GET | `/api/plan/run/:jobId` | Poll a run |
+| GET | `/api/plan/queue` | Drafts awaiting approval (with pre-flight blockers/warnings), approved-not-published (with Publish Run link), items due soon |
+
+Nothing is ever auto-approved or auto-posted. Capped at 3 drafts per run and 6 per day per workspace.
+
 ### Voice & avatar
 | Method | Path | Description |
 |---|---|---|

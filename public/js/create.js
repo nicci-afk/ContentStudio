@@ -7,11 +7,12 @@ export function renderCreate(root, params = null) {
   const openPackageId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
-  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', quickFormats: new Set(['instagram_reel']) };
+  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', reelStyle: 'voice', tripId: 'auto', quickFormats: new Set(['instagram_reel']) };
   const QUICK = ['instagram_reel', 'instagram_post', 'facebook_reel', 'facebook'];
   let media = [];
   let mediaTotal = 0;
   let mediaQuery = '';
+  let tripData = { items: [], autoPickId: null };
 
   const formCard = el('div', { class: 'card form-card' });
   const listWrap = el('div', {});
@@ -61,6 +62,23 @@ export function renderCreate(root, params = null) {
           return chip;
         })),
         quick ? el('p', { class: 'muted', style: 'margin:8px 0 0' }, 'Writes only what you pick, with 1 to 3 library assets, and skips the AI-answer layer. You can add more surfaces to it later.') : null),
+      (() => {
+        const live = tripData.items.filter((t) => t.status !== 'past' && t.useInContent !== false);
+        if (!live.length && !tripData.autoPickId) return document.createDocumentFragment();
+        const auto = tripData.items.find((t) => t.id === tripData.autoPickId);
+        const sel = el('select', { class: 'input select', onchange: (e) => { form.tripId = e.target.value; } },
+          el('option', { value: 'auto' }, auto ? `Automatic: ${auto.name}${auto.status === 'active' ? ' (on it now)' : ''}` : 'Automatic (no trip right now)'),
+          el('option', { value: 'none' }, 'No trip for this one'),
+          live.map((t) => el('option', { value: t.id }, `${t.name} (${t.start.slice(5)} to ${t.end.slice(5)})`)));
+        sel.value = form.tripId;
+        return field('Trip (optional)', sel, 'Writes from the real trip, tags the right place, and prefers footage shot during it.');
+      })(),
+      quick ? el('div', { class: 'field' },
+        el('span', { class: 'field-label' }, 'Reel style (for the reel formats)'),
+        el('div', { class: 'chip-row' },
+          el('button', { class: `chip chip-toggle ${form.reelStyle === 'voice' ? 'on' : ''}`, onclick: () => { form.reelStyle = 'voice'; drawForm(); } }, 'Voiceover (my voice)'),
+          el('button', { class: `chip chip-toggle ${form.reelStyle === 'music' ? 'on' : ''}`, onclick: () => { form.reelStyle = 'music'; drawForm(); } }, 'Music-led (add a trending sound in the app)')),
+        form.reelStyle === 'music' ? el('p', { class: 'muted', style: 'margin:8px 0 0' }, 'No spoken words: a silent cut with on-screen text beats. You add a trending sound inside Instagram or Facebook when you post.') : null) : null,
       el('div', { class: 'field' },
         el('span', { class: 'field-label' }, `Media (${mediaTotal.toLocaleString()} ready to use in this library)`),
         mediaTotal || mediaQuery
@@ -110,6 +128,8 @@ export function renderCreate(root, params = null) {
         pillarId: form.pillarId, seriesId: form.seriesId,
         platforms: [...(form.mode === 'quick' ? form.quickFormats : form.platforms)],
         quick: form.mode === 'quick',
+        reelStyle: form.mode === 'quick' && form.reelStyle === 'music' ? 'music' : null,
+        tripId: form.tripId,
         mediaIds: form.autoMedia ? [] : [...form.mediaIds],
         autoMedia: form.autoMedia,
       });
@@ -139,9 +159,9 @@ export function renderCreate(root, params = null) {
       el('div', { class: 'card' },
         el('h2', {}, 'Posts and packages'),
         items.length
-          ? el('div', { class: 'pkg-list' }, items.map((p) => el('button', { class: 'pkg-row', onclick: () => openDetail(p.id) },
+          ? el('div', { class: 'pkg-list' }, items.map((p) => el('button', { class: 'pkg-row', onclick: () => (p.kind === 'short' ? (location.hash = `#/shorts?pkg=${p.id}`) : openDetail(p.id)) },
               el('span', { class: 'pkg-topic' }, p.topic),
-              el('span', { class: 'muted' }, `${p.kind === 'quick' ? 'quick · ' : ''}${p.platforms.length} platform${p.platforms.length === 1 ? '' : 's'} · ${new Date(p.createdAt).toLocaleDateString()}${p.mode === 'template' ? ' · template mode' : ''}`),
+              el('span', { class: 'muted' }, `${p.kind === 'quick' ? 'quick · ' : p.kind === 'short' ? 'reel to Short · ' : ''}${p.platforms.length} platform${p.platforms.length === 1 ? '' : 's'} · ${new Date(p.createdAt).toLocaleDateString()}${p.mode === 'template' ? ' · template mode' : ''}`),
               scoreBadge(p.score, p.grade))))
           : emptyState('No packages yet', 'Generate your first package above — every platform, every asset, one topic.')));
   };
@@ -179,6 +199,7 @@ export function renderCreate(root, params = null) {
   const loadMedia = () => api.media({ usable: true, limit: 60, sort: mediaQuery ? 'taken' : 'quality', q: mediaQuery })
     .then(({ items, total }) => { media = items; if (!mediaQuery) mediaTotal = total; drawForm(); });
   loadMedia();
+  api.trips().then((d) => { tripData = d; drawForm(); }).catch(() => {});
   drawForm();
   drawList().then(() => { if (openPackageId) openDetail(openPackageId); });
   root.replaceChildren(container);
@@ -400,7 +421,8 @@ function producePanel(pkg, platformId, onPackageUpdated) {
   const videoSpec = appState.platforms.find((p) => p.id === platformId)?.videoSpec || null;
   // Default to a short avatar open, then B-roll: the fewest HeyGen credits,
   // and what she wants (a few seconds on camera, not a full-video avatar).
-  const state = { voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', avatarAudio: 'narration', orientation: defaultOrientation, delivery: savedDelivery || 'calm', resolution: 'hd' };
+  const musicLed = pkg.reelStyle === 'music';
+  const state = { seconds: 30, voiceId: null, useAvatar: false, avatarId: null, avatarKind: 'avatar', heygenVoiceId: null, avatarScope: 'open', avatarStyle: 'cutout', avatarAudio: 'narration', orientation: defaultOrientation, delivery: savedDelivery || 'calm', resolution: 'hd' };
 
   const voiceSelect = el('select', { class: 'input select', onchange: (e) => { state.voiceId = e.target.value || null; saveVoicePref('narration', state.voiceId); } },
     el('option', { value: '' }, 'No narration key — silent preview'));
@@ -582,7 +604,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
               title: 'Same video with audio removed — use for silent autoplay or adding your own music',
             }, '⬇ No sound'),
             el('a', { class: 'btn btn-ghost btn-xs', href: `/api/render/${r.id}/srt`, download: `${slug}.srt` }, '⬇ Captions (.srt)'),
-            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.resolution === '4k' ? ' · 4K' : r.resolution === 'hd' ? ' · 1080p' : ''}${r.fps ? ` ${r.fps}fps` : ''}${r.hdrClips ? ` · ${r.hdrClips} HDR clip${r.hdrClips === 1 ? '' : 's'} converted` : ''}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarVoice === 'narration' && r.avatar ? ' · one voice (your clone)' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)),
+            el('span', { class: 'muted' }, `${r.duration || '?'}s · ${r.orientation}${r.resolution === '4k' ? ' · 4K' : r.resolution === 'hd' ? ' · 1080p' : ''}${r.fps ? ` ${r.fps}fps` : ''}${r.hdrClips ? ` · ${r.hdrClips} HDR clip${r.hdrClips === 1 ? '' : 's'} converted` : ''}${r.preview ? ` · streams a fast ${mb(r.previewBytes)} preview` : ''}${r.captions ? ' · captions burned' : ''}${r.timed ? ' · word-timed' : ''}${r.music ? ' · music-led: add a trending sound when you post' : r.silent ? ' · silent preview' : ''}${r.avatarSections ? ` · avatar on camera ×${r.avatarSections}${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatarScope === 'all' && r.avatar ? ` · avatar full video${r.avatarStyle === 'cutout' ? ' (cut out)' : ''}` : r.avatar ? ' · avatar open' : ''}${r.avatarVoice === 'narration' && r.avatar ? ' · one voice (your clone)' : ''}${r.avatarCached ? ` · ${r.avatarCached} avatar clip${r.avatarCached === 1 ? '' : 's'} reused (no new HeyGen credits)` : ''}${r.trimmedToFit ? ` · trimmed to the ${r.trimmedToFit}s platform cap` : ''}${r.mediaTopUp ? ` · +${r.mediaTopUp} library assets for variety` : ''}${r.delivery && r.delivery !== 'balanced' ? ` · ${r.delivery} delivery` : ''}${r.videoClips ? ` · ${r.videoClips} real clip${r.videoClips === 1 ? '' : 's'}${r.clipWindows > r.videoClips ? ` (${r.clipWindows} distinct windows)` : ''}` : ''}${r.chaptersApplied ? ` · ${r.chapters?.length || 0} chapters auto-filled` : r.chapters?.length ? ` · ${r.chapters.length} chapters` : ''}${r.mediaFallback ? ' · library media' : ''}`)),
           clipsBlock(r));
       };
       const active = mine.filter((r) => (r.status || 'done') !== 'done');
@@ -608,6 +630,7 @@ function producePanel(pkg, platformId, onPackageUpdated) {
         orientation: state.orientation,
         delivery: state.delivery,
         resolution: state.resolution,
+        music: musicLed ? { seconds: state.seconds } : undefined,
         avatar: state.useAvatar ? { avatarId: state.avatarId, avatarKind: state.avatarKind, voiceId: state.heygenVoiceId, scope: state.avatarScope, style: state.avatarStyle, audioSource: state.avatarAudio } : null,
       });
       while (true) {
@@ -644,6 +667,21 @@ function producePanel(pkg, platformId, onPackageUpdated) {
 
   const spokenWords = scriptText.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length;
   const estSeconds = Math.round(spokenWords / 2.4);
+  if (musicLed) {
+    panel.append(
+      el('div', { class: 'row spread' },
+        el('span', { class: 'field-label' }, '🎵 Music-led reel'),
+        el('span', { class: 'muted' }, 'Your library footage cut to length, on-screen text burned in, no voice')),
+      el('div', { class: 'row gap wrap produce-controls' },
+        el('select', { class: 'input select', title: 'Length of the cut', onchange: (e) => { state.seconds = +e.target.value; } },
+          [15, 20, 30, 45].map((n) => el('option', { value: n, selected: n === state.seconds }, `${n} seconds`))),
+        orientationSelect),
+      el('p', { class: 'muted', style: 'margin:2px 0 6px' }, 'Post it from your Instagram or Facebook app and choose a sound from Audio, Trending (your creator account has the full catalog). Cuts land every few seconds; nudge them to the beat in Edits if you want.'),
+      el('button', { class: 'btn btn-primary', onclick: produce }, '🎬 Produce silent cut'),
+      result, renderList);
+    drawRenders();
+    return panel;
+  }
   panel.append(
     el('div', { class: 'row spread' },
       el('span', { class: 'field-label' }, '🎬 Auto-produce this video'),

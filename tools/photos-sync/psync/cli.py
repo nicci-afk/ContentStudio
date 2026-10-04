@@ -47,6 +47,7 @@ def build_options(a, phase="analysis") -> Options:
         state_dir=Path(a.state_dir), albums=csv_list(a.albums), exclude_albums=csv_list(a.exclude_albums) or [],
         batch_albums=getattr(a, "batch_albums", 3), phase=phase, since=a.since, max_items=a.max_items,
         dry_run=getattr(a, "dry_run", False), include_unfiled=a.include_unfiled, skip_labels=csv_list(a.skip_labels) or [],
+        max_spend=getattr(a, "max_spend", 0), price_in=getattr(a, "price_in", 2.0), price_out=getattr(a, "price_out", 10.0),
         start_analysis=not getattr(a, "no_start_analysis", False), mbps=a.mbps, ffmpeg=a.ffmpeg, ffprobe=a.ffprobe,
     )
 
@@ -137,6 +138,9 @@ def main(argv=None):
     run.add_argument("--server", default=os.environ.get("CONTENTSTUDIO_URL", DEFAULT_SERVER))
     run.add_argument("--workspace", help="workspace id or part of its name (its photo library is where files land)")
     run.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    run.add_argument("--max-spend", type=float, default=0, help="stop before the next batch once AI analysis has cost this many dollars (pilot guard)")
+    run.add_argument("--price-in", type=float, default=2.0, help="dollars per million input tokens, for the spend estimate")
+    run.add_argument("--price-out", type=float, default=10.0, help="dollars per million output tokens, for the spend estimate")
     run.add_argument("--max-upload-mbps", type=float, default=0, help="cap upload speed so the Wi-Fi stays usable")
     run.add_argument("--threshold", type=float, default=0.25, help="detector confidence that holds an item (lower is stricter)")
     run.add_argument("--hold-covered", action="store_true", help="also hold items showing covered body areas (swimwear), stricter still")

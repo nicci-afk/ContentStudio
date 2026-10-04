@@ -60,7 +60,7 @@ python photos_sync.py status
 tool prints it and asks you to confirm. GHR Egress Windows has its own library,
 so uploads into a travel workspace never reach it. Useful options:
 `--albums "A,B"`, `--exclude-albums "A,B"`, `--since 2025-01-01`,
-`--max-upload-mbps 10` (leave Wi-Fi for other things), `--threshold 0.15`
+`--max-upload-mbps 10` (leave Wi-Fi for other things), `--max-spend 2` (pilot guard: stop before the next batch once AI analysis has cost $2; every batch prints tokens and an estimated cost, tune with `--price-in`/`--price-out`), `--threshold 0.15`
 (lower holds more), `--hold-covered` (also hold swimwear-level exposure).
 
 ## When something is held

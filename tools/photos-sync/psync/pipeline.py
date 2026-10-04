@@ -39,6 +39,9 @@ class Options:
     workers: int = 4
     start_analysis: bool = True
     mbps: float = 0  # only used to print time estimates
+    max_spend: float = 0  # dollars of AI analysis after which no new batch starts (0 = no cap)
+    price_in: float = 2.0  # dollars per million input tokens (Sonnet 5 cached rate)
+    price_out: float = 10.0
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
 
@@ -208,13 +211,60 @@ class Pipeline:
         plan = self.batches(albums, eligible)
         self.log(f"{len(plan)} batch(es) of up to {self.o.batch_albums} album(s), newest first.")
         t0 = time.time()
+        self._usage0 = self._usage()
         try:
             for i, (titles, items) in enumerate(plan, 1):
                 self.log(f"\n== Batch {i}/{len(plan)}: {', '.join(titles[:6])}{' ...' if len(titles) > 6 else ''}  ({len(items)} items)")
                 self.process_batch(items, by_uuid)
+                spent = self._spend_line()
+                if self.o.max_spend and spent is not None and spent >= self.o.max_spend:
+                    self.log(f"   Spend cap reached (${spent:.2f} of ${self.o.max_spend:.2f}). Stopping before the next batch; "
+                             "run again with a higher --max-spend to continue where this left off.")
+                    break
         except KeyboardInterrupt:
             self.log("\nStopped. Run the same command again and it picks up where it left off.")
         self.report(time.time() - t0)
+
+    # -- AI spend ------------------------------------------------------------
+    def _usage(self):
+        """Token totals the server has used for photo analysis since it booted."""
+        if self.o.dry_run:
+            return None
+        try:
+            buckets = self.up.api("GET", "/api/usage").get("byBucket", {})
+        except Exception:
+            return None
+        tot = {"input": 0, "output": 0}
+        for name in ("media-analyze", "light"):
+            b = buckets.get(name) or {}
+            tot["input"] += b.get("input", 0) + b.get("cacheWrite", 0) + b.get("cacheRead", 0)
+            tot["output"] += b.get("output", 0)
+        return tot
+
+    def _wait_analysis_idle(self, timeout=900):
+        end = time.time() + timeout
+        while time.time() < end:
+            try:
+                if not self.up.analysis_state().get("running"):
+                    return
+            except Exception:
+                return
+            time.sleep(5)
+
+    def _spend_line(self):
+        """Print what AI analysis cost since this run started; returns dollars or None."""
+        if self._usage0 is None:
+            return None
+        self._wait_analysis_idle()
+        now = self._usage()
+        if now is None:
+            return None
+        din = now["input"] - self._usage0["input"]
+        dout = now["output"] - self._usage0["output"]
+        dollars = din / 1e6 * self.o.price_in + dout / 1e6 * self.o.price_out
+        self.log(f"   AI analysis so far this run: {din:,} in / {dout:,} out tokens, about ${dollars:.2f} "
+                 f"(at ${self.o.price_in:g}/${self.o.price_out:g} per million tokens; set --price-in/--price-out for your model)")
+        return dollars
 
     def process_batch(self, items, by_uuid):
         phases = ["analysis", "originals"] if self.o.phase == "both" else [self.o.phase]

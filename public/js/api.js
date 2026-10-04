@@ -126,6 +126,17 @@ export const api = {
     xhr.send(file);
   }),
 
+  youtubeStatus: () => get('/api/youtube/status'),
+  youtubeDisconnect: () => send('POST', '/api/youtube/disconnect', {}),
+  channelAudit: () => get('/api/youtube/channel-audit'),
+  measureOverview: () => get('/api/measure/overview'),
+  measureInsights: () => send('POST', '/api/measure/insights', {}),
+  resultsCheck: (id) => send('POST', `/api/packages/${id}/results/check`, {}),
+  resultsManual: (id, body) => send('POST', `/api/packages/${id}/results/manual`, body),
+  shortsConsent: (id) => send('POST', `/api/shorts/${id}/consent`, { faces: true, rights: true }),
+  shortsTranslate: (id, languages) => send('POST', `/api/shorts/${id}/translate`, { languages }),
+  shortsReplies: (id, comments) => send('POST', `/api/shorts/${id}/replies`, { comments }),
+
   plan: () => get('/api/plan'),
   savePlan: (plan) => send('PUT', '/api/plan', plan),
   runPlan: (itemId) => send('POST', '/api/plan/run', itemId ? { itemId } : {}),

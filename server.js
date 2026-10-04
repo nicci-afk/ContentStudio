@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,8 @@ const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna,
 const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
 const { storageReport, cleanupStorage, deleteRender, diskFree } = await import('./lib/storage.js');
 const shortsLib = await import('./lib/shorts.js');
+const gLib = await import('./lib/google.js');
+const measureLib = await import('./lib/measure.js');
 const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.js');
 const { getPlan, normalizePlan, planQueue, runPlan, planRunning, schedulePlan, FACT_LABELS, MAX_PER_RUN, DAILY_DRAFT_CAP } = await import('./lib/plan.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
@@ -1570,6 +1573,7 @@ app.post('/api/shorts/:id/source', (req, res) => {
   }
   const paths = shortsLib.shortPaths(pkg.short.renderId);
   const out = fs.createWriteStream(paths.sourcePart);
+  const hash = crypto.createHash('sha256');
   let received = 0;
   let failed = false;
   const abort = (code, message) => {
@@ -1582,6 +1586,7 @@ app.post('/api/shorts/:id/source', (req, res) => {
   };
   req.on('data', (chunk) => {
     received += chunk.length;
+    hash.update(chunk);
     if (received > shortsLib.MAX_SOURCE_BYTES) abort(413, 'the video is larger than the 500MB limit');
   });
   req.on('error', () => abort(400, 'upload interrupted'));
@@ -1590,7 +1595,7 @@ app.post('/api/shorts/:id/source', (req, res) => {
     if (failed) return;
     fs.rename(paths.sourcePart, paths.source, (err) => {
       if (err) return abort(500, 'could not store the video');
-      res.json({ package: shortsLib.markUploaded(pkg.id, received) });
+      res.json({ package: shortsLib.markUploaded(pkg.id, received, hash.digest('hex')) });
     });
   });
   req.pipe(out);
@@ -1611,6 +1616,9 @@ app.post('/api/shorts/:id/process', (req, res) => {
     transcribe: o.transcribe !== false,
     keepSource: !!o.keepSource,
     hosted: !!o.hosted,
+    hostedBy: String(o.hostedBy || '').trim().slice(0, 80),
+    commission: !!o.commission,
+    scheduleAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(o.scheduleAt || '') ? o.scheduleAt : null,
     aiContent: !!o.aiContent,
     caption: String(o.caption || '').slice(0, 4000),
     notes: String(o.notes || '').slice(0, 2000),
@@ -1672,11 +1680,35 @@ app.get('/api/shorts/:id/prompt', (req, res) => {
   const pkg = shortPkg(req.params.id);
   if (!pkg?.platforms?.youtube_shorts) return res.status(404).json({ error: 'unknown import' });
   if (!pkg.approvals?.youtube_shorts?.approved) return res.status(409).json({ error: 'approve the copy first' });
+  if (!pkg.short?.consent?.faces) return res.status(409).json({ error: 'confirm the consent checklist first' });
   res.json({
     prompt: shortsLib.buildPostingPrompt({ pkg, profile: stateStore.get().profile, origin: originOf(req), workspaceId: listWorkspaces().activeId }),
     files: shortsLib.downloadNames(pkg),
   });
 });
+
+app.post('/api/shorts/:id/consent', (req, res) => {
+  if (!shortPkg(req.params.id)) return res.status(404).json({ error: 'unknown import' });
+  try { res.json({ package: shortsLib.setConsent(req.params.id, req.body || {}) }); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.post('/api/shorts/:id/translate', wrap(async (req, res) => {
+  if (!shortPkg(req.params.id)) return res.status(404).json({ error: 'unknown import' });
+  try { res.json({ package: await shortsLib.translateCaptions(req.params.id, req.body?.languages) }); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+
+app.get('/api/shorts/:id/captions/:lang', (req, res) => {
+  const pkg = shortPkg(req.params.id);
+  const file = shortsLib.captionFile(pkg, req.params.lang);
+  if (!file) return res.status(404).end();
+  res.set('Content-Disposition', `attachment; filename="${shortsLib.downloadNames(pkg).translations[req.params.lang]}"`);
+  res.type('text/plain').sendFile(file);
+});
+
+app.post('/api/shorts/:id/replies', wrap(async (req, res) => {
+  if (!shortPkg(req.params.id)) return res.status(404).json({ error: 'unknown import' });
+  try { res.json({ replies: await shortsLib.draftReplies(req.params.id, req.body?.comments) }); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
 
 app.get('/api/shorts/:id/embed-kit', (req, res) => {
   const pkg = shortPkg(req.params.id);
@@ -1696,6 +1728,69 @@ app.post('/api/shorts/:id/verify', wrap(async (req, res) => {
     res.status(409).json({ error: err.message });
   }
 }));
+
+// ---- measurement loop: YouTube connection, results, insights ---------------
+
+app.get('/api/youtube/status', (req, res) => {
+  res.json({
+    config: gLib.googleConfig(), connected: gLib.isConnected(), channel: gLib.connectedChannel(),
+    redirectUri: gLib.redirectUri(originOf(req)),
+  });
+});
+
+// Each business connects its own channel. The state value carries the
+// workspace through Google's consent page and back.
+app.get('/api/youtube/connect', (req, res) => {
+  try {
+    res.redirect(gLib.startConnect({ workspaceId: listWorkspaces().activeId, base: originOf(req) }));
+  } catch (err) {
+    res.status(400).type('text/plain').send(err.message);
+  }
+});
+
+app.get('/api/youtube/callback', wrap(async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.redirect(`/#/shorts?yt=${encodeURIComponent(`Google said: ${String(error).slice(0, 80)}`)}`);
+  const ws = gLib.takeState(String(state || ''));
+  if (!ws || !code) return res.status(400).type('text/plain').send('That connection link expired. Go back and press Connect YouTube again.');
+  try {
+    const channel = await runWithWorkspace(ws, () => gLib.finishConnect({ code: String(code), base: originOf(req) }));
+    res.redirect(`/#/shorts?yt=${encodeURIComponent(`Connected: ${channel.title}`)}`);
+  } catch (err) {
+    res.redirect(`/#/shorts?yt=${encodeURIComponent(String(err.message).slice(0, 160))}`);
+  }
+}));
+
+app.post('/api/youtube/disconnect', (req, res) => { gLib.disconnect(); res.json({ ok: true }); });
+
+app.get('/api/youtube/channel-audit', wrap(async (req, res) => {
+  if (!gLib.isConnected()) return res.status(409).json({ error: 'connect YouTube first' });
+  res.json(await measureLib.channelAudit(stateStore.get().profile));
+}));
+
+app.get('/api/measure/overview', (req, res) => res.json(measureLib.overview()));
+
+app.post('/api/measure/insights', wrap(async (req, res) => {
+  try { res.json({ insights: await measureLib.generateInsights() }); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
+
+app.post('/api/packages/:id/results/check', wrap(async (req, res) => {
+  try {
+    const snapshot = await measureLib.takeSnapshot(req.params.id);
+    res.json({ snapshot, package: packageStore.get().items.find((p) => p.id === req.params.id) });
+  } catch (err) {
+    res.status(409).json({ error: err.message });
+  }
+}));
+
+app.post('/api/packages/:id/results/manual', (req, res) => {
+  try {
+    const manual = measureLib.saveManual(req.params.id, req.body || {});
+    res.json({ manual, package: packageStore.get().items.find((p) => p.id === req.params.id) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 // ---- storage (shared data disk: report, cleanup, render deletion) --------
 
@@ -1762,6 +1857,7 @@ if (swept.freedBytes > 0) {
 }
 scheduleBackups();
 schedulePlan();
+measureLib.scheduleMeasure();
 
 const port = Number(process.env.PORT || 4600);
 app.listen(port, () => {

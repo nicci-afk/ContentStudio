@@ -101,6 +101,31 @@ export const api = {
   cutClips: (renderId) => send('POST', `/api/render/${renderId}/clips`, {}),
   clipsStatus: (jobId) => get(`/api/render/clips/${jobId}`),
 
+  shortsRelated: (pkgId) => get(`/api/shorts/related${pkgId ? `?pkg=${pkgId}` : ''}`),
+  shortsCreate: (body) => send('POST', '/api/shorts', body),
+  shortsProcess: (id, mode, opts) => send('POST', `/api/shorts/${id}/process`, { mode, opts }),
+  shortsStatus: (id) => get(`/api/shorts/${id}/status`),
+  shortsCover: (id, body) => send('POST', `/api/shorts/${id}/cover`, body),
+  shortsPrompt: (id) => get(`/api/shorts/${id}/prompt`),
+  shortsEmbedKit: (id) => get(`/api/shorts/${id}/embed-kit`),
+  shortsVerify: (id) => send('POST', `/api/shorts/${id}/verify`, {}),
+  shortsDeleteSource: (id) => send('POST', `/api/shorts/${id}/source/delete`, {}),
+  // XHR rather than fetch so the browser can report upload progress.
+  shortsUpload: (id, file, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/shorts/${id}/source`);
+    xhr.setRequestHeader('content-type', file.type || 'video/mp4');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* not json */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(new Error(body.error || `upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('upload interrupted'));
+    xhr.send(file);
+  }),
+
   plan: () => get('/api/plan'),
   savePlan: (plan) => send('PUT', '/api/plan', plan),
   runPlan: (itemId) => send('POST', '/api/plan/run', itemId ? { itemId } : {}),

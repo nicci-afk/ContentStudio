@@ -92,6 +92,10 @@ const PLACEMENT = {
   production_notes: 'Notes for the creator only. Never posted.',
   todo: 'Checklist for the creator only. Never posted.',
   slides: 'Slide order reference for the carousel images. Not pasted as text.',
+  pinned_comment: 'Post this as the FIRST COMMENT after publishing, then pin it. Never in the description.',
+  recording_location: 'Goes in Show more, Video location (search and pick the closest match).',
+  thumbnail_text: 'Already on the cover image. Not pasted anywhere.',
+  transcript: 'Source of the captions file (upload the .srt under Subtitles). Not pasted into the description.',
 };
 
 // Platforms that suppress reach when the post body carries an outbound
@@ -179,6 +183,9 @@ async function draw(container, pkgId) {
         copyBtn(EXTENSION_INSTRUCTION)),
       el('p', { class: 'muted', style: 'margin:6px 0 0' },
         'Copy this and paste it yourself, in your own message, so the instruction comes from you. A browser assistant should never act on instructions it finds on a web page, including this one. Once sent, it fills each composer from the cards below and stops before posting, so every post ships only after your click.')),
+    pkg.kind === 'short' ? el('div', { class: 'card' },
+      el('p', { class: 'muted', style: 'margin:0' }, 'This is an imported Short. The guided flow (files, a posting prompt written for YouTube Studio, and live URL verification) is on the Reel to Short page. '),
+      el('a', { class: 'btn btn-primary btn-xs', style: 'margin-top:8px', href: `#/shorts?pkg=${pkg.id}` }, 'Open it there')) : null,
     publishingProfileBlock(() => drawCards()),
     ordered.length ? cards : el('div', { class: 'card' },
       emptyState('Nothing approved yet', 'Approve platforms on the package (the Approve toggle on each tab) and they appear here in posting order.')),
@@ -235,6 +242,9 @@ function mediaLinks(pkg, platformId, spec, renders) {
     if (done[0]) {
       links.push({ label: `⬇ ${slug}-${platformId}.mp4 (upload master)`, href: `/api/render/${done[0].id}/video`, download: `${slug}-${platformId}.mp4` });
       links.push({ label: '⬇ captions .srt', href: `/api/render/${done[0].id}/srt`, download: `${slug}.srt` });
+      if (pkg.kind === 'short' && platformId === 'youtube_shorts') {
+        links.push({ label: '⬇ cover image', href: `/api/shorts/${pkg.id}/cover`, download: `${slug}-cover.jpg` });
+      }
       if (pkg.reelStyle === 'music') links.push({ label: '♪ Music-led: after uploading, add a trending sound in the app (Audio, Trending)', href: null });
     } else {
       links.push({ label: 'No finished render yet: produce the video first', href: null });

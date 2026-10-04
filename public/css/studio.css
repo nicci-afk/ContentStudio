@@ -358,3 +358,14 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 
   .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
+
+/* Reel to Short */
+.bar { height: 8px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line); overflow: hidden; margin: 8px 0; }
+.bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.flag { border-left: 3px solid var(--line); padding: 6px 10px; margin: 6px 0; font-size: 13px; line-height: 1.45; }
+.flag-warn { border-left-color: var(--warn); }
+.flag-error { border-left-color: var(--danger); }
+.short-layout { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }
+.short-layout video, .short-layout img.cover { width: 100%; border-radius: 12px; background: #000; display: block; }
+.step-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; font-size: 13.5px; }
+@media (max-width: 760px) { .short-layout { grid-template-columns: 1fr; } .short-layout video { max-width: 280px; } }

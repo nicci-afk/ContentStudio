@@ -152,9 +152,9 @@ export function renderCreate(root, params = null) {
       el('div', { class: 'card' },
         el('h2', {}, 'Posts and packages'),
         items.length
-          ? el('div', { class: 'pkg-list' }, items.map((p) => el('button', { class: 'pkg-row', onclick: () => openDetail(p.id) },
+          ? el('div', { class: 'pkg-list' }, items.map((p) => el('button', { class: 'pkg-row', onclick: () => (p.kind === 'short' ? (location.hash = `#/shorts?pkg=${p.id}`) : openDetail(p.id)) },
               el('span', { class: 'pkg-topic' }, p.topic),
-              el('span', { class: 'muted' }, `${p.kind === 'quick' ? 'quick · ' : ''}${p.platforms.length} platform${p.platforms.length === 1 ? '' : 's'} · ${new Date(p.createdAt).toLocaleDateString()}${p.mode === 'template' ? ' · template mode' : ''}`),
+              el('span', { class: 'muted' }, `${p.kind === 'quick' ? 'quick · ' : p.kind === 'short' ? 'reel to Short · ' : ''}${p.platforms.length} platform${p.platforms.length === 1 ? '' : 's'} · ${new Date(p.createdAt).toLocaleDateString()}${p.mode === 'template' ? ' · template mode' : ''}`),
               scoreBadge(p.score, p.grade))))
           : emptyState('No packages yet', 'Generate your first package above — every platform, every asset, one topic.')));
   };

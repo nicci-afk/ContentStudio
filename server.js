@@ -27,7 +27,8 @@ const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, hey
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
 const { startRender, renderJob, renderFile, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
-const { storageReport, cleanupStorage, deleteRender } = await import('./lib/storage.js');
+const { storageReport, cleanupStorage, deleteRender, diskFree } = await import('./lib/storage.js');
+const shortsLib = await import('./lib/shorts.js');
 const { backupStatus, runBackup, scheduleBackups } = await import('./lib/backup.js');
 const { getPlan, normalizePlan, planQueue, runPlan, planRunning, schedulePlan, FACT_LABELS, MAX_PER_RUN, DAILY_DRAFT_CAP } = await import('./lib/plan.js');
 const { DEMO_STATE } = await import('./lib/demo.js');
@@ -1054,7 +1055,10 @@ app.post('/api/packages/:id/approve', (req, res) => {
 app.post('/api/packages/:id/published', async (req, res) => {
   const { platformId, url } = req.body || {};
   if (!platformId) return res.status(400).json({ error: 'platformId required' });
-  const u = String(url || '').trim();
+  // A pasted YouTube link in any common shape (youtu.be, watch?v=, Studio)
+  // becomes the one canonical Shorts URL, so the registry never holds two
+  // spellings of the same video.
+  const u = shortsLib.normalizeYouTubeUrl(url, platformId);
   if (u && !/^https?:\/\/\S+$/i.test(u)) return res.status(400).json({ error: 'the URL must start with http(s)://' });
   const profile = stateStore.get().profile;
   let pkg = null;
@@ -1096,7 +1100,21 @@ app.post('/api/packages/:id/published', async (req, res) => {
     }));
     pkg = packageStore.get().items.find((p) => p.id === req.params.id) || pkg;
   }
-  res.json({ package: pkg, audit, indexNow });
+  // A Short that came through the import flow can be checked against what
+  // YouTube actually published (the live title against the planned one).
+  let verification = null;
+  if (u && platformId === 'youtube_shorts' && pkg.kind === 'short') {
+    verification = await shortsLib.verifyLive(pkg.id).catch(() => null);
+    packageStore.update((s) => ({
+      items: s.items.map((p) => {
+        if (p.id !== pkg.id) return p;
+        p.jsonld = buildJsonLd(p, profile);
+        return p;
+      }),
+    }));
+    pkg = packageStore.get().items.find((p) => p.id === req.params.id) || pkg;
+  }
+  res.json({ package: pkg, audit, indexNow, verification });
 });
 
 // Re-run the crawler-view audit on an already registered URL (after a site
@@ -1256,6 +1274,10 @@ app.post('/api/packages/:id/rescore', (req, res) => {
 });
 
 app.delete('/api/packages/:id', (req, res) => {
+  const doomed = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (doomed?.kind === 'short' && doomed.short?.renderId && doomed.short.status !== 'processing') {
+    shortsLib.removeShortFiles(doomed.short.renderId);
+  }
   packageStore.update((s) => ({ items: s.items.filter((p) => p.id !== req.params.id) }));
   res.json({ ok: true });
 });
@@ -1513,6 +1535,166 @@ app.post('/api/packages/:id/carousel-media', wrap(async (req, res) => {
     }),
   }));
   res.json({ package: updated });
+}));
+
+// ---- reel to YouTube Short (import a finished reel, optimize, post) -------
+
+const shortPkg = (id) => packageStore.get().items.find((p) => p.id === id && p.kind === 'short') || null;
+const originOf = (req) => `${String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0]}://${req.get('host')}`;
+
+// Published pages from this brand a Short can point at (the long-form video,
+// the article, the site page): the link graph that ties a Short to the
+// content it supports.
+app.get('/api/shorts/related', (req, res) => {
+  res.json({ items: shortsLib.relatedContent(String(req.query.pkg || '')) });
+});
+
+app.post('/api/shorts', (req, res) => {
+  const { name, size, topic } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name required' });
+  if (Number(size) > shortsLib.MAX_SOURCE_BYTES) return res.status(413).json({ error: 'the video is larger than the 500MB limit' });
+  const pkg = shortsLib.createShortDraft({ name, size, topic, profile: stateStore.get().profile });
+  res.json({ package: pkg });
+});
+
+// Streamed straight to disk (never buffered), same approach as library originals.
+app.post('/api/shorts/:id/source', (req, res) => {
+  const pkg = shortPkg(req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown import' });
+  if (pkg.short.status === 'processing') return res.status(409).json({ error: 'this import is being processed right now' });
+  const declared = Number(req.headers['content-length'] || 0);
+  if (declared > shortsLib.MAX_SOURCE_BYTES) return res.status(413).json({ error: 'the video is larger than the 500MB limit' });
+  const free = diskFree();
+  if (free && free.freeBytes < Math.max(1536 * 1024 * 1024, declared * 2 + 256 * 1024 * 1024)) {
+    return res.status(507).json({ error: 'the data disk is nearly full. Run storage cleanup before importing' });
+  }
+  const paths = shortsLib.shortPaths(pkg.short.renderId);
+  const out = fs.createWriteStream(paths.sourcePart);
+  let received = 0;
+  let failed = false;
+  const abort = (code, message) => {
+    if (failed) return;
+    failed = true;
+    out.destroy();
+    fs.rm(paths.sourcePart, { force: true }, () => {});
+    req.destroy();
+    if (!res.headersSent) res.status(code).json({ error: message });
+  };
+  req.on('data', (chunk) => {
+    received += chunk.length;
+    if (received > shortsLib.MAX_SOURCE_BYTES) abort(413, 'the video is larger than the 500MB limit');
+  });
+  req.on('error', () => abort(400, 'upload interrupted'));
+  out.on('error', () => abort(500, 'could not write the video to disk'));
+  out.on('finish', () => {
+    if (failed) return;
+    fs.rename(paths.sourcePart, paths.source, (err) => {
+      if (err) return abort(500, 'could not store the video');
+      res.json({ package: shortsLib.markUploaded(pkg.id, received) });
+    });
+  });
+  req.pipe(out);
+});
+
+// mode: full (first run) | reencode (new master, keep the copy) | rewrite
+// (new copy and cover from the existing master).
+app.post('/api/shorts/:id/process', (req, res) => {
+  const pkg = shortPkg(req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown import' });
+  const b = req.body || {};
+  const mode = ['full', 'reencode', 'rewrite'].includes(b.mode) ? b.mode : 'full';
+  const o = b.opts || {};
+  const opts = {
+    audio: o.audio === 'mute' ? 'mute' : 'keep',
+    normalize: o.normalize !== false,
+    fit: o.fit === 'crop' ? 'crop' : 'blur',
+    transcribe: o.transcribe !== false,
+    keepSource: !!o.keepSource,
+    hosted: !!o.hosted,
+    aiContent: !!o.aiContent,
+    caption: String(o.caption || '').slice(0, 4000),
+    notes: String(o.notes || '').slice(0, 2000),
+    tripId: o.tripId && o.tripId !== 'none' ? String(o.tripId) : 'none',
+    filmedOn: /^\d{4}-\d{2}-\d{2}$/.test(o.filmedOn || '') ? o.filmedOn : null,
+    related: /^https?:\/\//.test(o.related?.url || '') ? { url: String(o.related.url), label: String(o.related.label || '').slice(0, 90) } : null,
+    ctaUrl: /^https?:\/\//.test(o.ctaUrl || '') ? String(o.ctaUrl) : null,
+    language: /^[a-z]{2,3}$/.test(o.language || '') ? o.language : 'en',
+  };
+  if (mode !== 'full') {
+    // Follow-up runs only change what was named; everything else carries over.
+    const prev = pkg.short.opts || {};
+    for (const k of Object.keys(opts)) if (!(k in o)) opts[k] = prev[k] ?? opts[k];
+  }
+  try {
+    shortsLib.startShortProcess(pkg.id, opts, mode);
+  } catch (err) {
+    return res.status(409).json({ error: err.message });
+  }
+  res.json({ ok: true });
+});
+
+app.get('/api/shorts/:id/status', (req, res) => {
+  const short = shortsLib.shortStatus(req.params.id);
+  if (!short) return res.status(404).json({ error: 'unknown import' });
+  res.json({ short });
+});
+
+app.post('/api/shorts/:id/cover', wrap(async (req, res) => {
+  if (!shortPkg(req.params.id)) return res.status(404).json({ error: 'unknown import' });
+  const pkg = await shortsLib.remakeCover(req.params.id, { n: req.body?.n, text: req.body?.text });
+  const profile = stateStore.get().profile;
+  packageStore.update((s) => ({ items: s.items.map((p) => {
+    if (p.id !== pkg.id) return p;
+    p.jsonld = buildJsonLd(p, profile);
+    p.visibility = scorePackage(p, profile);
+    return p;
+  }) }));
+  res.json({ package: shortPkg(req.params.id) });
+}));
+
+app.get('/api/shorts/:id/cover', (req, res) => {
+  const pkg = shortPkg(req.params.id);
+  if (!pkg?.short?.renderId) return res.status(404).end();
+  const file = shortsLib.shortPaths(pkg.short.renderId).cover;
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.set('Content-Disposition', `attachment; filename="${shortsLib.downloadNames(pkg).cover}"`);
+  res.type('image/jpeg').sendFile(file);
+});
+
+app.post('/api/shorts/:id/source/delete', (req, res) => {
+  if (!shortPkg(req.params.id)) return res.status(404).json({ error: 'unknown import' });
+  res.json({ freedBytes: shortsLib.deleteSource(req.params.id) });
+});
+
+// The prompt only exists once the creator has approved the copy, the same
+// human gate the Publish Run page enforces.
+app.get('/api/shorts/:id/prompt', (req, res) => {
+  const pkg = shortPkg(req.params.id);
+  if (!pkg?.platforms?.youtube_shorts) return res.status(404).json({ error: 'unknown import' });
+  if (!pkg.approvals?.youtube_shorts?.approved) return res.status(409).json({ error: 'approve the copy first' });
+  res.json({
+    prompt: shortsLib.buildPostingPrompt({ pkg, profile: stateStore.get().profile, origin: originOf(req), workspaceId: listWorkspaces().activeId }),
+    files: shortsLib.downloadNames(pkg),
+  });
+});
+
+app.get('/api/shorts/:id/embed-kit', (req, res) => {
+  const pkg = shortPkg(req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown import' });
+  try {
+    res.json(shortsLib.buildEmbedKit({ pkg, profile: stateStore.get().profile }));
+  } catch (err) {
+    res.status(409).json({ error: err.message });
+  }
+});
+
+app.post('/api/shorts/:id/verify', wrap(async (req, res) => {
+  if (!shortPkg(req.params.id)) return res.status(404).json({ error: 'unknown import' });
+  try {
+    res.json({ verification: await shortsLib.verifyLive(req.params.id) });
+  } catch (err) {
+    res.status(409).json({ error: err.message });
+  }
 }));
 
 // ---- storage (shared data disk: report, cleanup, render deletion) --------

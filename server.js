@@ -25,6 +25,8 @@ const { platformList, PLATFORMS } = await import('./lib/platforms.js');
 const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibility.js');
 const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError, usageReport } =
   await import('./lib/providers.js');
+const { checkAsset } = await import('./lib/gate.js');
+const { STATUSES, getKnowledgeBase } = await import('./lib/facts.js');
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
 const { startRender, renderCapabilities, renderJob, renderFile, rendersDir, listRenders, activeRenderIds, renderPoster, previewFile, enqueuePreview, ffmpegPath, startClipsJob, clipsJob } = await import('./lib/render.js');
@@ -873,6 +875,7 @@ app.patch('/api/packages/:id', (req, res) => {
       if (p.id !== req.params.id) return p;
       if (!p.platforms?.[platformId]?.fields || typeof field !== 'string') return p;
       p.platforms[platformId].fields[field] = value;
+      if (p.platforms[platformId].gate) p.platforms[platformId].gate = checkAsset(platformId, p.platforms[platformId].fields, profile);
       p.contentModifiedAt = new Date().toISOString();
       if (field === 'chapters') syncChapterTitles(p, platformId, value);
       p.jsonld = buildJsonLd(p, profile);
@@ -888,21 +891,54 @@ app.patch('/api/packages/:id', (req, res) => {
 // and the Publish Run page only ever exposes approved assets. This is the
 // human gate in front of any assisted posting flow.
 app.post('/api/packages/:id/approve', (req, res) => {
-  const { platformId, approved } = req.body || {};
+  const { platformId, approved, override } = req.body || {};
   if (!platformId) return res.status(400).json({ error: 'platformId required' });
   let pkg = null;
+  let refused = null;
+  const profile = stateStore.get().profile;
   packageStore.update((s) => ({
     items: s.items.map((p) => {
       if (p.id !== req.params.id) return p;
       if (!p.platforms?.[platformId]) return p;
       p.approvals = { ...(p.approvals || {}) };
-      if (approved) p.approvals[platformId] = { approved: true, at: new Date().toISOString() };
+      // Fail closed: an asset that breaks the voice card or carries an
+      // unverified claim cannot be approved without an explicit, logged override.
+      const gate = approved ? checkAsset(platformId, p.platforms[platformId].fields, profile) : null;
+      if (gate) p.platforms[platformId].gate = gate;
+      if (gate?.status === 'blocked' && override !== true) { refused = gate; return p; }
+      if (approved) p.approvals[platformId] = { approved: true, at: new Date().toISOString(), ...(gate?.status === 'blocked' ? { override: true } : {}) };
       else delete p.approvals[platformId];
       return (pkg = p);
     }),
   }));
+  if (refused) return res.status(409).json({ error: 'blocked by the quality gate: fix the cited voice or fact issues, add the fact to the knowledge base, or approve with override', gate: refused });
   if (!pkg) return res.status(404).json({ error: 'unknown package/platform' });
   res.json({ package: pkg });
+});
+
+// Knowledge base (Module 5): per-entity claims the gate may let through.
+app.get('/api/knowledge', (req, res) => res.json({ entries: getKnowledgeBase(stateStore.get().profile) }));
+app.put('/api/knowledge', (req, res) => {
+  const entries = (Array.isArray(req.body?.entries) ? req.body.entries : []).slice(0, 500)
+    .map((e) => ({ id: String(e.id || uid()), claim: String(e.claim || '').slice(0, 500), status: STATUSES.includes(e.status) ? e.status : 'unverified', source: String(e.source || '').slice(0, 300), date: e.date ? String(e.date).slice(0, 10) : null }))
+    .filter((e) => e.claim);
+  stateStore.update((s) => ({ ...s, profile: { ...s.profile, knowledgeBase: entries } }));
+  res.json({ entries: getKnowledgeBase(stateStore.get().profile) });
+});
+
+// Re-run the gate over a package (after knowledge base or copy changes).
+app.post('/api/packages/:id/gate', (req, res) => {
+  const profile = stateStore.get().profile;
+  let pkg = null;
+  packageStore.update((s) => ({
+    items: s.items.map((p) => {
+      if (p.id !== req.params.id) return p;
+      for (const [id, a] of Object.entries(p.platforms || {})) a.gate = checkAsset(id, a.fields, profile);
+      return (pkg = p);
+    }),
+  }));
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  res.json({ gates: Object.fromEntries(Object.entries(pkg.platforms).map(([id, a]) => [id, { status: a.gate.status, voice: a.gate.voice, blocked: a.gate.blocked }])) });
 });
 
 // Published-URL registry: where each asset actually went live. Feeds

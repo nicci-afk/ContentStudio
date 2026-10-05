@@ -33,6 +33,11 @@ const feedbackLib = await import('./lib/feedback.js');
 const reviewsLib = await import('./lib/reviews.js');
 const entityLib = await import('./lib/entitymon.js');
 const pacing = await import('./lib/pacing.js');
+const magnetsLib = await import('./lib/magnets.js');
+const metaLib = await import('./lib/meta.js');
+const { sendMail, mailConfigured } = await import('./lib/mail.js');
+const { claudeJson } = await import('./lib/providers.js');
+const { leadFrom } = await import('./lib/leads.js');
 const { getVoiceCard, DEFAULT_CARD } = await import('./lib/voice.js');
 const { attachThumbnails, hookContext, trackedLink } = await import('./lib/engine.js');
 const { STATUSES, getKnowledgeBase } = await import('./lib/facts.js');
@@ -313,6 +318,7 @@ app.post('/api/leads/capture', wrap(async (req, res) => {
   corsHeaders(res, origin);
   if (String(b.hp || '').trim()) return res.json({ ok: true }); // honeypot: pretend success, store nothing
   if (b.emailConsent !== true) return res.status(400).json({ error: 'please tick the box to receive your resource by email' });
+  if (b.magnet) return captureMagnet(req, res, wsId, b);
   const resource = findResource(wsId, String(b.resource || ''));
   if (!resource) return res.status(400).json({ error: 'unknown resource' });
   await runWithWorkspace(wsId, async () => {
@@ -355,6 +361,47 @@ app.post('/api/leads/capture', wrap(async (req, res) => {
     }
   });
 }));
+
+// Interactive lead magnet sign-up: same safeguards as a resource (origin,
+// honeypot, rate limits, recorded consent), plus only known option ids and
+// clamped numbers are kept from the visitor's answers.
+async function captureMagnet(req, res, wsId, b) {
+  await runWithWorkspace(wsId, async () => {
+    const m = magnetsLib.getMagnet(String(b.magnet || ''));
+    if (!m || m.status !== 'approved') return res.status(400).json({ error: 'unknown form' });
+    const sub = magnetsLib.sanitizeSubmission(m, b);
+    const tags = {
+      utm_source: b.utm_source, utm_medium: b.utm_medium, utm_campaign: b.utm_campaign, utm_content: b.utm_content, page: b.page,
+      referrer: String(b.referrer || '').toLowerCase().replace(/[^a-z0-9.\-]/g, ''),
+    };
+    const out = upsertLead(leadStore, { firstName: b.firstName, email: b.email, consent: b.adConsent === true, sourceTags: tags, fbc: b.fbc, fbp: b.fbp },
+      { stage: 'resource', resource: `magnet:${m.slug}`, optIn: { at: new Date().toISOString(), text: m.consentText, page: String(b.page || '').slice(0, 300) } });
+    if (out.error) return res.status(400).json({ error: out.error });
+    const { lead } = out;
+    const entry = { slug: m.slug, kind: m.kind, resultKey: sub.resultKey, ...(sub.answers ? { answers: sub.answers } : {}), ...(sub.inputs ? { inputs: sub.inputs, outputs: sub.outputs } : {}), at: new Date().toISOString() };
+    record(lead.id, { magnets: [...(lead.magnets || []), entry].slice(-20) });
+    const base = publicBase(req);
+    leadStore.update((d) => (d.settings?.publicBase === base ? d : { ...d, settings: { ...(d.settings || {}), publicBase: base } }));
+    res.json({ ok: true, eventId: lead.id, resultKey: sub.resultKey, message: 'Check your inbox. Your result is on its way.' });
+
+    const manifest = loadManifest(wsId) || {};
+    const biz = stateStore.get().profile?.business || {};
+    const settings = leadStore.get().settings || {};
+    const fresh = leadStore.get().items.find((x) => x.id === lead.id) || lead;
+    const recent = (fresh.deliveries || []).find((d) => d.slug === `magnet:${m.slug}` && Date.now() - Date.parse(d.at) < 24 * 3600 * 1000);
+    if (!recent && !fresh.unsubscribed) {
+      try {
+        if (!mailConfigured()) throw new Error('no email provider configured');
+        const r = m.results.find((x) => x.key === sub.resultKey);
+        const linked = r?.resourceSlug ? findResource(wsId, r.resourceSlug) : null;
+        const { subject, html } = magnetsLib.resultEmail({ m, lead: fresh, submission: sub, brand: manifest.legalName || biz.name || '', person: manifest.person || biz.person?.name || '', unsubUrl: `${base}/unsubscribe/${fresh.token}`, downloadUrl: linked ? `${base}/r/${fresh.token}/${linked.slug}.pdf` : '', ...mailCtx(manifest) });
+        await sendMail({ to: fresh.email, subject, html, from: leadFrom(manifest.person || biz.person?.name || ''), replyTo: settings.notifyEmail || undefined, headers: { 'List-Unsubscribe': `<${base}/unsubscribe/${fresh.token}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } });
+        leadStore.update((d) => ({ ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, delivery: stamp({ status: 'sent' }), deliveries: [...(x.deliveries || []), { slug: `magnet:${m.slug}`, at: new Date().toISOString() }] } : x)) }));
+      } catch (err) { record(lead.id, { delivery: stamp(errStatus(err)) }); }
+    }
+    if (out.newResource && (!out.duplicate || lead.capi?.status !== 'sent')) await leadSideEffects(lead, { capiEvent: 'Lead', capiEventId: lead.id });
+  });
+}
 
 // Tokenized download of a resource PDF. The token is per lead and unguessable.
 app.get('/r/:token/:file', (req, res) => {
@@ -1172,6 +1219,53 @@ app.put('/api/publishing/automation', (req, res) => {
   });
   res.json({ allowed: pacing.allowedPlatforms(stateStore.get().profile) });
 });
+
+// Interactive lead magnets (quiz and calculator).
+app.get('/api/magnets', (req, res) => res.json({ magnets: magnetsLib.listMagnets() }));
+app.post('/api/magnets/draft', wrap(async (req, res) => {
+  const { kind, topic, audience } = req.body || {};
+  if (!topic) return res.status(400).json({ error: 'topic required' });
+  if (!providerStatus().anthropic) return res.status(409).json({ error: 'drafting a lead magnet needs the Claude key' });
+  const profile = stateStore.get().profile;
+  const { masterContext } = await import('./lib/engine.js');
+  const m = await magnetsLib.draftMagnet({
+    profile, kind: kind === 'calculator' ? 'calculator' : 'quiz', topic: String(topic).slice(0, 200), audience: String(audience || '').slice(0, 200),
+    ask: (prompt) => claudeJson({ system: masterContext(profile), usageBucket: 'generate', maxTokens: 4000, messages: [{ role: 'user', content: prompt }] }),
+  });
+  res.json({ magnet: m });
+}));
+app.put('/api/magnets/:slug', (req, res) => {
+  if (!magnetsLib.getMagnet(req.params.slug)) return res.status(404).json({ error: 'unknown magnet' });
+  res.json({ magnet: magnetsLib.saveMagnet(req.body || {}, stateStore.get().profile, { slug: req.params.slug }) });
+});
+app.post('/api/magnets/:slug/approve', (req, res) => {
+  try { res.json({ magnet: magnetsLib.approveMagnet(req.params.slug, stateStore.get().profile, { approved: req.body?.approved !== false, override: req.body?.override === true }) }); } catch (err) { res.status(err.status || 400).json({ error: err.message, problems: err.problems }); }
+});
+app.delete('/api/magnets/:slug', (req, res) => { magnetsLib.deleteMagnet(req.params.slug); res.json({ ok: true }); });
+app.post('/api/magnets/:slug/try', (req, res) => {
+  const m = magnetsLib.getMagnet(req.params.slug);
+  if (!m) return res.status(404).json({ error: 'unknown magnet' });
+  try { res.json(magnetsLib.sanitizeSubmission(m, req.body || {})); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.get('/api/magnets/:slug/embed', (req, res) => {
+  const m = magnetsLib.getMagnet(req.params.slug);
+  if (!m) return res.status(404).json({ error: 'unknown magnet' });
+  if (m.status !== 'approved') return res.status(409).json({ error: 'approve the magnet first' });
+  const d = leadStore.get();
+  let captureId = d.settings?.captureId;
+  if (!captureId) { captureId = newLeadKey().slice(0, 20); leadStore.set({ ...d, settings: { ...(d.settings || {}), captureId } }); }
+  const manifest = loadManifest(listWorkspaces().activeId) || {};
+  const site = stateStore.get().profile?.business?.links?.website || '';
+  res.json({ html: magnetsLib.embedHtml(m, { endpoint: `${publicBase(req)}/api/leads/capture`, captureId, accent: manifest.accent || '#00566b' }), site, note: site ? `Paste this into a page on ${site}. Sign-ups are accepted only from that site.` : 'Add your website to the profile first: sign-ups are accepted only from your own site.' });
+});
+
+// Meta metrics by API (saves, shares, follows).
+app.get('/api/meta', (req, res) => res.json(metaLib.metaStatus()));
+app.put('/api/meta/connect', (req, res) => res.json(metaLib.saveMetaAuth(req.body || {})));
+app.delete('/api/meta', (req, res) => res.json(metaLib.disconnectMeta()));
+app.post('/api/meta/sync', wrap(async (req, res) => {
+  try { res.json(await metaLib.syncMeta()); } catch (err) { res.status(409).json({ error: err.message }); }
+}));
 
 // Published-URL registry: where each asset actually went live. Feeds
 // llms.txt canonical URLs, JSON-LD url/sameAs/SeekToAction, and the
@@ -2121,6 +2215,7 @@ scheduleBackups();
 schedulePlan();
 measureLib.scheduleMeasure();
 feedbackLib.scheduleFeedback();
+metaLib.scheduleMeta();
 
 // Review requests (hourly, off per workspace until switched on) and the
 // monthly entity-consistency check (off until switched on).

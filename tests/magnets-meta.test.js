@@ -115,7 +115,8 @@ const calcRaw = {
     res.end(JSON.stringify(body));
   });
   await new Promise((r) => srv.listen(0, r));
-  process.env.META_GRAPH_URL = `http://127.0.0.1:${srv.address().port}/v1`;
+  process.env.META_GRAPH_URL = `http://127.0.0.1:${srv.address().port}`;
+  process.env.META_GRAPH_VERSION = 'v1';
   const meta = await import('../lib/meta.js');
   const fb = await import('../lib/feedback.js');
   assert.equal(meta.igCode('https://www.instagram.com/reel/ABC123/?igsh=x'), 'ABC123');

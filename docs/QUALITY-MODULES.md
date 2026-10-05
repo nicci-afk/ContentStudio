@@ -120,7 +120,7 @@ whole-state save.
   never returned). Daily pull of saves, shares, follows for Instagram posts and
   shares for Page posts published in the last 90 days, stored as
   `performance[p].api`; the feedback loop takes the larger of manual and API
-  numbers. DMs are not offered by the API. Env `META_GRAPH_URL` (tests),
+  numbers. DMs are not offered by the API. Env `META_GRAPH_URL` (base host, shared with the Conversions API sender) and `META_GRAPH_VERSION` (default v24.0), both for tests,
   `DISABLE_META_SYNC`, `META_FIRST_RUN_MS`. API: `GET /api/meta`,
   `PUT /api/meta/connect`, `DELETE /api/meta`, `POST /api/meta/sync`.
 
@@ -129,4 +129,4 @@ The Jev classifier stays a stub (`externalClassifier` in lib/facts.js) by the
 spec's own rule: build it once funnel volume justifies it.
 
 ## Tests
-`node tests/voice-facts.test.js`, `node tests/modules.test.js`, `node tests/magnets-meta.test.js`.
+`node tests/voice-facts.test.js`, `node tests/modules.test.js`, `node tests/magnets-meta.test.js`, `node tests/lead-path.test.js` (real server, mock Resend and Meta: sign-up, scoring, alert, resource email, Lead event, nurture step from the live scheduler, stop on booked call), `node tests/publish-path.test.js` (real server, mock Claude: gate, one retry, fail-closed block, approval refusal and override, pacing, Re-check, public booking route, protected Quality endpoints).

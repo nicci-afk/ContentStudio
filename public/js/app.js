@@ -17,6 +17,7 @@ import { renderTrips } from './trips.js';
 import { renderPlan } from './plan.js';
 import { renderShorts } from './shorts.js';
 import { renderEditor } from './editor.js';
+import { renderQuality } from './quality.js';
 
 const ROUTES = [
   { path: 'dashboard', label: 'Dashboard', icon: '◈', render: renderDashboard },
@@ -29,6 +30,7 @@ const ROUTES = [
   { path: 'create', label: 'Create', icon: '⚡', render: renderCreate },
   { path: 'leads', label: 'Leads', icon: '✉', render: renderLeads },
   { path: 'visibility', label: 'Visibility', icon: '◎', render: renderLedger },
+  { path: 'quality', label: 'Quality', icon: '✓', render: renderQuality },
   { path: 'plan', label: 'Plan', icon: '🗓', render: renderPlan },
   { path: 'shorts', label: 'Reel to Short', icon: '▶', render: renderShorts },
   { path: 'editor', label: 'Editor', icon: '✂', render: renderEditor },

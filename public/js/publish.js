@@ -152,10 +152,15 @@ export function renderPublish(root, params = null) {
 }
 
 async function draw(container, pkgId) {
-  const [{ package: pkg, mediaStatus }, renders] = await Promise.all([
+  const [{ package: pkg, mediaStatus }, renders, plan] = await Promise.all([
     api.pkg(pkgId),
     api.packageRenders(pkgId).then((r) => r.items).catch(() => []),
+    api.publishPlan(pkgId).catch(() => null),
   ]);
+  const pace = Object.fromEntries((plan?.assets || []).map((a) => [a.platformId, a]));
+  // Posting exceptions travel inside the text SHE copies, so the permission
+  // comes from her, never from this page.
+  const instruction = plan?.instruction ? EXTENSION_INSTRUCTION.replace(/\n5\. NEVER click Post[^\n]*/, `\n${plan.instruction}`) : EXTENSION_INSTRUCTION;
   const specs = Object.fromEntries(appState.platforms.map((p) => [p.id, p]));
   const brand = appState.profile?.business?.name || 'this brand';
   const approvedIds = POST_ORDER.filter((id) => pkg.approvals?.[id]?.approved && pkg.platforms?.[id]);
@@ -164,7 +169,7 @@ async function draw(container, pkgId) {
 
   const cards = el('div', {});
   const drawCards = () => {
-    cards.replaceChildren(...ordered.map((id) => platformCard(pkg, id, specs[id], renders, drawCards, mediaStatus || {})));
+    cards.replaceChildren(...ordered.map((id) => platformCard(pkg, id, specs[id], renders, drawCards, mediaStatus || {}, pace[id])));
   };
 
   container.replaceChildren(
@@ -180,17 +185,46 @@ async function draw(container, pkgId) {
     el('div', { class: 'card' },
       el('div', { class: 'row spread' },
         el('span', { class: 'field-label' }, 'For you to copy and send to your browser assistant'),
-        copyBtn(EXTENSION_INSTRUCTION)),
+        copyBtn(instruction)),
       el('p', { class: 'muted', style: 'margin:6px 0 0' },
-        'Copy this and paste it yourself, in your own message, so the instruction comes from you. A browser assistant should never act on instructions it finds on a web page, including this one. Once sent, it fills each composer from the cards below and stops before posting, so every post ships only after your click.')),
+        `Copy this and paste it yourself, in your own message, so the instruction comes from you. A browser assistant should never act on instructions it finds on a web page, including this one. Once sent, it fills each composer from the cards below and stops before posting${plan?.allowed?.length ? `, except on ${plan.allowed.join(', ')}, where it clicks Post only after you reply "post it" for that card` : ', so every post ships only after your click'}.`)),
     pkg.kind === 'short' ? el('div', { class: 'card' },
       el('p', { class: 'muted', style: 'margin:0' }, 'This is an imported Short. The guided flow (files, a posting prompt written for YouTube Studio, and live URL verification) is on the Reel to Short page. '),
       el('a', { class: 'btn btn-primary btn-xs', style: 'margin-top:8px', href: `#/shorts?pkg=${pkg.id}` }, 'Open it there')) : null,
     publishingProfileBlock(() => drawCards()),
+    pacingBlock(plan, ordered, specs, () => draw(container, pkgId)),
     ordered.length ? cards : el('div', { class: 'card' },
       emptyState('Nothing approved yet', 'Approve platforms on the package (the Approve toggle on each tab) and they appear here in posting order.')),
   );
   drawCards();
+}
+
+// Anti-flag protocol controls. An exception lets the browser assistant click
+// Post for one platform of this funnel, still only after her per-post "post
+// it". Only one funnel may hold exceptions until its own volume justifies a
+// second; the server enforces that.
+function pacingBlock(plan, ordered, specs, onChanged) {
+  if (!plan) return null;
+  const allowed = new Set(plan.allowed || []);
+  const ids = [...new Set([...ordered, ...allowed])];
+  return el('details', { class: 'card' },
+    el('summary', { class: 'field-label' }, `Posting pace and exceptions${allowed.size ? ` (assisted posting allowed: ${[...allowed].join(', ')})` : ''}`),
+    el('p', { class: 'muted', style: 'margin:8px 0' }, 'Each card shows a suggested time: inside the platform\'s normal window, spaced from your other posts, under its daily cap (LinkedIn: one a day, weekdays), never on a round minute. Every post still needs your approval. When the assistant completes a post for you, that is automated posting, so it needs an exception here first, per platform, for this business only.'),
+    ids.length ? el('div', { class: 'col gap' }, ids.map((id) => el('label', { style: 'display:flex;gap:8px;align-items:center' },
+      el('input', { type: 'checkbox', checked: allowed.has(id) ? true : null, onchange: async (e) => {
+        const want = e.target.checked;
+        try {
+          await api.setAutomation(id, want);
+          toast(want ? `Exception granted for ${specs[id]?.label || id}` : 'Exception removed');
+          onChanged();
+        } catch (err) {
+          if (err.status === 409 && want && confirm(`${err.message}\n\nDoes this funnel's own volume justify a second one?`)) {
+            try { await api.setAutomation(id, true, { volumeJustified: true }); toast('Exception granted'); onChanged(); return; } catch (e2) { toast(e2.message, 'err'); }
+          } else toast(err.message, 'err');
+          e.target.checked = !want;
+        }
+      } }),
+      `Let the assistant click Post for ${specs[id]?.label || id} after I say "post it"`))) : el('p', { class: 'muted' }, 'Approve something first.'));
 }
 
 // Per-brand publishing profile. A brand can publish from a person and
@@ -304,7 +338,7 @@ function mediaLinks(pkg, platformId, spec, renders, mediaStatus = {}) {
   return links;
 }
 
-function platformCard(pkg, platformId, spec, renders, refresh, mediaStatus = {}) {
+function platformCard(pkg, platformId, spec, renders, refresh, mediaStatus = {}, pace = null) {
   const posted = pkg.publishedUrls?.[platformId] || null;
   const media = mediaLinks(pkg, platformId, spec, renders, mediaStatus);
   const fields = [];
@@ -375,6 +409,10 @@ function platformCard(pkg, platformId, spec, renders, refresh, mediaStatus = {})
           }, x.label));
         })())),
     posted ? el('p', { class: 'muted' }, `Live: ${posted}`) : null,
+    !posted && pace ? el('p', { class: 'muted', style: 'margin:4px 0' },
+      pace.suggestedAt ? `Suggested time: ${new Date(pace.suggestedAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} (inside this platform's usual window, spaced from your other posts, never on a round minute)` : 'No open slot in the next three weeks under this platform\'s daily cap.',
+      pace.automationAllowed ? ' · Assisted posting allowed after you say "post it"' : ' · You click Post yourself') : null,
+    !posted && pace?.variance ? el('p', { class: 'warn' }, pace.variance.message) : null,
     media.length ? el('div', { class: 'asset-field' },
       el('span', { class: 'field-label' }, 'Media to attach (download first, then attach in the composer)'),
       el('div', { class: 'row gap wrap', style: 'margin-top:6px' },

@@ -26,6 +26,15 @@ const { buildLlmsTxt, scorePackage, buildJsonLd } = await import('./lib/visibili
 const { providerStatus, elevenVoices, elevenClone, elevenTts, heygenAvatars, heygenVoices, heygenGenerate, heygenStatus, heygenQuota, ProviderError, usageReport } =
   await import('./lib/providers.js');
 const { checkAsset } = await import('./lib/gate.js');
+const hooksLib = await import('./lib/hooks.js');
+const trendInputs = await import('./lib/trendinputs.js');
+const thumbsLib = await import('./lib/thumbs.js');
+const feedbackLib = await import('./lib/feedback.js');
+const reviewsLib = await import('./lib/reviews.js');
+const entityLib = await import('./lib/entitymon.js');
+const pacing = await import('./lib/pacing.js');
+const { getVoiceCard, DEFAULT_CARD } = await import('./lib/voice.js');
+const { attachThumbnails, hookContext, trackedLink } = await import('./lib/engine.js');
 const { STATUSES, getKnowledgeBase } = await import('./lib/facts.js');
 const { generatePackage, generatePlatforms, synthesizeBrief, synthesizeVoiceDna, suggestPillars, analyzeMedia, selectMedia, matchCarouselSlides, regenerateCitations, writeReshareComment } =
   await import('./lib/engine.js');
@@ -173,6 +182,15 @@ app.put('/api/state', (req, res) => {
   // stored plan instead of overwriting it with that tab's older copy.
   const storedPlan = stateStore.get()?.profile?.contentPlan;
   if (storedPlan && req.body?.profile) req.body.profile.contentPlan = storedPlan;
+  // Same for the quality-module data saved through their own routes
+  // (knowledge base, voice card, posting exceptions): a stale tab must never
+  // roll them back.
+  const stored = stateStore.get()?.profile || {};
+  if (req.body?.profile) {
+    for (const k of ['knowledgeBase', 'voiceCard']) if (stored[k] !== undefined) req.body.profile[k] = stored[k];
+    if (stored.business?.bookingUrl && req.body.profile.business && req.body.profile.business.bookingUrl === undefined) req.body.profile.business.bookingUrl = stored.business.bookingUrl;
+    if (stored.publishing?.automation) req.body.profile.publishing = { ...(req.body.profile.publishing || {}), automation: stored.publishing.automation };
+  }
   stateStore.set(req.body);
   res.json({ ok: true, warnings: lintProfile(stateStore.get().profile || {}) });
 });
@@ -483,9 +501,13 @@ app.patch('/api/leads/:id', (req, res) => {
   if (req.body?.status !== undefined) {
     if (!leadStatuses().includes(req.body.status)) return res.status(400).json({ error: 'unknown status' });
     patch.status = req.body.status;
+    // Stage timestamps close the attribution loop (booked call, signed).
+    const now = new Date().toISOString();
+    if (req.body.status === 'call_booked') patch.bookedAt = now;
+    if (req.body.status === 'won') patch.wonAt = now;
   }
   if (req.body?.notes !== undefined) patch.notes = String(req.body.notes).slice(0, 2000);
-  leadStore.set({ ...d, items: d.items.map((x) => (x.id === req.params.id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x)) });
+  leadStore.set({ ...d, items: d.items.map((x) => (x.id === req.params.id ? { ...x, ...patch, bookedAt: x.bookedAt || patch.bookedAt, wonAt: x.wonAt || patch.wonAt, updatedAt: new Date().toISOString() } : x)) });
   res.json({ ok: true });
 });
 
@@ -767,8 +789,20 @@ app.get('/api/plan/queue', (req, res) => res.json(planQueue(activeWsId())));
 
 const jobs = new Map();
 
+// Module 4 entry point: one core idea in, native outputs out (Instagram,
+// LinkedIn, Facebook by default), each validated on its own.
+app.post('/api/formats', (req, res, next) => {
+  const b = req.body || {};
+  // One entity per call: the voice card and knowledge base are this workspace's.
+  if (b.entityId && b.entityId !== listWorkspaces().activeId) return res.status(400).json({ error: 'entity_id must be the active workspace; switch to that business first' });
+  const refs = b.asset_refs || b.assetRefs || [];
+  req.body = { topic: b.core_idea || b.coreIdea || b.topic, angle: b.angle, hookId: b.hook_id || b.hookId, mediaIds: refs, platforms: b.platforms?.length ? b.platforms : ['instagram_post', 'linkedin', 'facebook'], quick: true, ctaUrl: b.ctaUrl, pillarId: b.pillarId, tripId: b.tripId, autoMedia: !refs.length };
+  req.url = '/api/generate';
+  next();
+});
+
 app.post('/api/generate', wrap(async (req, res) => {
-  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick, reelStyle, tripId } = req.body;
+  const { topic, angle, pillarId, seriesId, platforms, mediaIds, ctaUrl, autoMedia, quick, reelStyle, tripId, hookId } = req.body;
   if (!topic) return res.status(400).json({ error: 'topic required' });
   const state = stateStore.get();
   const profile = state.profile;
@@ -804,7 +838,7 @@ app.post('/api/generate', wrap(async (req, res) => {
       mediaSelection = sel;
     }
     const pkg = await generatePackage({
-      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick, reelStyle: reelStyle === 'music' ? 'music' : null, tripBlock, tripId: trip?.id || null,
+      profile, topic, angle, pillar, series, media, ctaUrl, quick: !!quick, reelStyle: reelStyle === 'music' ? 'music' : null, tripBlock, tripId: trip?.id || null, hookId: hookId || null,
       platformIds: platforms,
       onProgress: (p) => { job.progress = p; },
     });
@@ -875,7 +909,8 @@ app.patch('/api/packages/:id', (req, res) => {
       if (p.id !== req.params.id) return p;
       if (!p.platforms?.[platformId]?.fields || typeof field !== 'string') return p;
       p.platforms[platformId].fields[field] = value;
-      if (p.platforms[platformId].gate) p.platforms[platformId].gate = checkAsset(platformId, p.platforms[platformId].fields, profile);
+      if (p.platforms[platformId].gate) p.platforms[platformId].gate = checkAsset(platformId, p.platforms[platformId].fields, profile, hookContext(p));
+      if (p.thumbnails?.[platformId]) { const t = p.thumbnails[platformId]; const probs = thumbsLib.checkBrief(t, { fields: p.platforms[platformId].fields, profile }); p.thumbnails[platformId] = { ...t, problems: probs, status: probs.length ? 'blocked' : 'passed' }; }
       p.contentModifiedAt = new Date().toISOString();
       if (field === 'chapters') syncChapterTitles(p, platformId, value);
       p.jsonld = buildJsonLd(p, profile);
@@ -903,7 +938,7 @@ app.post('/api/packages/:id/approve', (req, res) => {
       p.approvals = { ...(p.approvals || {}) };
       // Fail closed: an asset that breaks the voice card or carries an
       // unverified claim cannot be approved without an explicit, logged override.
-      const gate = approved ? checkAsset(platformId, p.platforms[platformId].fields, profile) : null;
+      const gate = approved ? checkAsset(platformId, p.platforms[platformId].fields, profile, hookContext(p)) : null;
       if (gate) p.platforms[platformId].gate = gate;
       if (gate?.status === 'blocked' && override !== true) { refused = gate; return p; }
       if (approved) p.approvals[platformId] = { approved: true, at: new Date().toISOString(), ...(gate?.status === 'blocked' ? { override: true } : {}) };
@@ -933,12 +968,209 @@ app.post('/api/packages/:id/gate', (req, res) => {
   packageStore.update((s) => ({
     items: s.items.map((p) => {
       if (p.id !== req.params.id) return p;
-      for (const [id, a] of Object.entries(p.platforms || {})) a.gate = checkAsset(id, a.fields, profile);
+      for (const [id, a] of Object.entries(p.platforms || {})) a.gate = checkAsset(id, a.fields, profile, hookContext(p));
       return (pkg = p);
     }),
   }));
   if (!pkg) return res.status(404).json({ error: 'unknown package' });
-  res.json({ gates: Object.fromEntries(Object.entries(pkg.platforms).map(([id, a]) => [id, { status: a.gate.status, voice: a.gate.voice, blocked: a.gate.blocked }])) });
+  res.json({ package: pkg, gates: Object.fromEntries(Object.entries(pkg.platforms).map(([id, a]) => [id, { status: a.gate.status, voice: a.gate.voice, format: a.gate.format, blocked: a.gate.blocked }])) });
+});
+
+// ---- quality modules: voice card, hooks, trends, thumbnails, feedback ------
+
+// Module 1: the voice card for this entity (defaults + the owner's additions).
+app.get('/api/voice-card', (req, res) => {
+  const profile = stateStore.get().profile;
+  res.json({ card: getVoiceCard(profile), own: profile.voiceCard || {}, defaults: DEFAULT_CARD });
+});
+app.put('/api/voice-card', (req, res) => {
+  const b = req.body || {};
+  const lines = (v) => (Array.isArray(v) ? v : String(v || '').split('\n')).map((x) => String(x).trim()).filter(Boolean).slice(0, 300);
+  const patterns = (Array.isArray(b.banned_patterns) ? b.banned_patterns : []).slice(0, 50).map((p, i) => ({ id: String(p.id || `own-${i}`).slice(0, 40), label: String(p.label || p.id || 'custom pattern').slice(0, 120), re: String(p.re || '') }))
+    .filter((p) => { try { new RegExp(p.re, 'im'); return !!p.re; } catch { return false; } });
+  const voiceCard = { banned_phrases: lines(b.banned_phrases), banned_patterns: patterns, style_targets: typeof b.style_targets === 'object' && b.style_targets ? b.style_targets : {} };
+  stateStore.update((s) => ({ ...s, profile: { ...s.profile, voiceCard } }));
+  res.json({ card: getVoiceCard(stateStore.get().profile), own: voiceCard, defaults: DEFAULT_CARD });
+});
+
+// Module 2: hook library.
+app.get('/api/hooks', (req, res) => res.json({ hooks: hooksLib.listHooks({ includeRetired: true }), ranked: hooksLib.rankHooks({ platform: req.query.platform || '*', niche: stateStore.get().profile?.business?.niche || '*' }).map((h) => h.id), patterns: hooksLib.PATTERNS }));
+app.post('/api/hooks', (req, res) => {
+  try { res.json({ hook: hooksLib.saveHook(req.body || {}) }); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.delete('/api/hooks/:id', (req, res) => {
+  if (req.params.id.startsWith('seed-')) return res.status(400).json({ error: 'seed templates cannot be deleted' });
+  hooksLib.deleteHook(req.params.id);
+  res.json({ ok: true });
+});
+// Try a fill without generating anything: shows exactly why it would fail.
+app.post('/api/hooks/test', (req, res) => {
+  const entry = hooksLib.getHook(req.body?.templateId);
+  if (!entry) return res.status(404).json({ error: 'unknown template' });
+  res.json(hooksLib.fillHook(entry, req.body?.slots || {}, stateStore.get().profile));
+});
+
+// Module 3: trend inputs (a weekly trends.json).
+app.get('/api/trend-inputs', (req, res) => res.json({ trends: trendInputs.listTrends(), ttlDays: trendInputs.TTL_DAYS }));
+app.post('/api/trend-inputs', (req, res) => res.json(trendInputs.importTrends(req.body)));
+app.delete('/api/trend-inputs/:id', (req, res) => { trendInputs.deleteTrend(req.params.id); res.json({ trends: trendInputs.listTrends() }); });
+
+// Module 6: (re)build thumbnail briefs for a package's video assets.
+app.post('/api/packages/:id/thumbnails', wrap(async (req, res) => {
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const media = (mediaStore.get().items || []).filter((m) => (pkg.mediaIds || []).includes(m.id));
+  const work = { ...pkg };
+  await attachThumbnails(work, stateStore.get().profile, media);
+  let out = null;
+  packageStore.update((s) => ({ items: s.items.map((p) => (p.id === pkg.id ? (out = { ...p, thumbnails: work.thumbnails || {} }) : p)) }));
+  res.json({ package: out });
+}));
+app.patch('/api/packages/:id/thumbnails/:platformId', (req, res) => {
+  const profile = stateStore.get().profile;
+  let out = null;
+  packageStore.update((s) => ({ items: s.items.map((p) => {
+    if (p.id !== req.params.id || !p.thumbnails?.[req.params.platformId]) return p;
+    const t = { ...p.thumbnails[req.params.platformId] };
+    if (req.body?.overlay_text !== undefined) t.overlay_text = String(req.body.overlay_text).slice(0, 80);
+    if (req.body?.visual_direction !== undefined) t.visual_direction = String(req.body.visual_direction).slice(0, 600);
+    const probs = thumbsLib.checkBrief(t, { fields: p.platforms?.[req.params.platformId]?.fields, profile });
+    out = { ...p, thumbnails: { ...p.thumbnails, [req.params.platformId]: { ...t, problems: probs, status: probs.length ? 'blocked' : 'passed' } } };
+    return out;
+  }) }));
+  if (!out) return res.status(404).json({ error: 'unknown package or no brief for that platform' });
+  res.json({ package: out });
+});
+
+// Module 7: performance numbers per asset, the report, and manual runs.
+app.post('/api/packages/:id/performance', (req, res) => {
+  const { platformId } = req.body || {};
+  const metrics = feedbackLib.cleanMetrics(req.body || {});
+  let out = null;
+  packageStore.update((s) => ({ items: s.items.map((p) => {
+    if (p.id !== req.params.id || !p.platforms?.[platformId]) return p;
+    out = { ...p, performance: { ...(p.performance || {}), [platformId]: { ...metrics, updatedAt: new Date().toISOString(), source: 'manual' } } };
+    return out;
+  }) }));
+  if (!out) return res.status(404).json({ error: 'unknown package/platform' });
+  res.json({ package: out, ignored: Object.keys(req.body || {}).filter((k) => /like/i.test(k)).length ? 'likes are not a metric and were ignored' : undefined });
+});
+app.get('/api/feedback/report', (req, res) => res.json(feedbackLib.report()));
+app.post('/api/feedback/run', (req, res) => {
+  const job = ['weekly', 'biweekly', 'monthly', 'quarterly'].includes(req.body?.job) ? req.body.job : null;
+  if (!job) return res.status(400).json({ error: 'job must be weekly, biweekly, monthly or quarterly' });
+  res.json({ ran: feedbackLib.runDue(Date.now(), job), report: feedbackLib.report() });
+});
+app.put('/api/feedback/settings', (req, res) => {
+  studioStore.update((s) => ({ ...s, settings: { ...(s.settings || {}), feedbackAuto: req.body?.auto !== false } }));
+  res.json({ auto: studioStore.get().settings.feedbackAuto });
+});
+
+// Closed-loop attribution: post -> lead -> booked call -> signed agreement.
+app.get('/api/attribution', (req, res) => {
+  const pkgs = packageStore.get().items;
+  const attr = feedbackLib.attributeLeads(pkgs, leadStore.get().items || []);
+  const rows = [];
+  for (const p of pkgs) {
+    for (const platformId of Object.keys(p.platforms || {})) {
+      const a = attr[p.id]?.[platformId];
+      const clicks = p.bookingClicks?.[platformId] || 0;
+      if (!a && !clicks && !p.publishedUrls?.[platformId]) continue;
+      rows.push({ pkgId: p.id, topic: p.topic, platformId, publishedUrl: p.publishedUrls?.[platformId] || null, bookingClicks: clicks, leads: a?.leads || 0, booked: a?.booked || 0, signed: a?.signed || 0, metrics: p.performance?.[platformId] || null });
+    }
+  }
+  res.json({ rows: rows.sort((x, y) => y.signed - x.signed || y.booked - x.booked || y.leads - x.leads), bookingUrl: stateStore.get().profile?.business?.bookingUrl || '' });
+});
+
+// Book-a-brief-call path. Public, tracked redirects to the owner's calendar
+// link (profile.business.bookingUrl): /book/<lead token> from emails, and
+// /book/c/<capture id>?p=<package>&s=<platform> from content CTAs.
+const bookingTarget = (wsId, extra) => {
+  const url = readWorkspace(wsId)?.state?.profile?.business?.bookingUrl;
+  if (!url) return null;
+  try { const u = new URL(url); for (const [k, v] of Object.entries(extra)) if (v) u.searchParams.set(k, v); return u.toString(); } catch { return null; }
+};
+app.get('/book/c/:captureId', (req, res) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  const wsId = findWorkspaceByCaptureId(req.params.captureId);
+  const pkgId = String(req.query.p || '').slice(0, 40);
+  const platformId = String(req.query.s || '').slice(0, 40);
+  const target = wsId && bookingTarget(wsId, { utm_source: platformId, utm_medium: 'organic', utm_content: pkgId });
+  if (!target) return res.status(404).type('text').send('This booking link is not active.');
+  runWithWorkspace(wsId, () => {
+    packageStore.update((s) => ({ items: s.items.map((p) => (p.id === pkgId && p.platforms?.[platformId] ? { ...p, bookingClicks: { ...(p.bookingClicks || {}), [platformId]: ((p.bookingClicks || {})[platformId] || 0) + 1 } } : p)) }));
+  });
+  res.redirect(302, target);
+});
+app.get('/book/:token', (req, res) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  const found = findLeadByToken(req.params.token);
+  const target = found && bookingTarget(found.wsId, { utm_source: 'email', utm_medium: 'email', utm_content: found.lead.source?.utm_content || '' });
+  if (!target) return res.status(404).type('text').send('This booking link is not active.');
+  runWithWorkspace(found.wsId, () => record(found.lead.id, { bookingClicks: (found.lead.bookingClicks || 0) + 1, lastBookingClickAt: new Date().toISOString() }));
+  res.redirect(302, target);
+});
+
+// Reviews: request automation (off by default) and velocity.
+app.get('/api/reviews', (req, res) => {
+  const st = reviewsLib.reviewState();
+  const leads = leadStore.get().items || [];
+  res.json({ ...st, velocity: reviewsLib.velocity(st.counts), eligible: reviewsLib.eligible(leads, st).map((l) => ({ id: l.id, name: `${l.firstName || ''} ${l.lastName || ''}`.trim(), email: l.email, wonAt: l.wonAt || null })), requested: leads.filter((l) => l.reviewRequest).length });
+});
+app.put('/api/reviews/settings', (req, res) => res.json(reviewsLib.saveReviewSettings(req.body || {})));
+app.post('/api/reviews/counts', (req, res) => {
+  try { res.json(reviewsLib.recordCount(req.body || {})); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.post('/api/reviews/send', wrap(async (req, res) => {
+  const biz = stateStore.get().profile?.business || {};
+  const out = await reviewsLib.runReviewRequests({ brand: biz.name || '', person: biz.person?.name || '', base: publicBase(req), force: true });
+  res.json(out);
+}));
+
+// Entity consistency monitoring.
+app.get('/api/entity-check', (req, res) => res.json({ ...entityLib.entityState(), expected: entityLib.expectedEntity(stateStore.get().profile), targets: entityLib.targets(stateStore.get().profile, entityLib.entityState().urls) }));
+app.put('/api/entity-check/settings', (req, res) => res.json(entityLib.saveEntitySettings(req.body || {})));
+app.post('/api/entity-check/run', wrap(async (req, res) => res.json(await entityLib.runEntityCheck(stateStore.get().profile))));
+
+// Anti-flag publishing protocol: per-asset suggested times, variance checks
+// and the posting exceptions for this funnel.
+app.get('/api/packages/:id/publish-plan', (req, res) => {
+  const pkg = packageStore.get().items.find((p) => p.id === req.params.id);
+  if (!pkg) return res.status(404).json({ error: 'unknown package' });
+  const profile = stateStore.get().profile;
+  const all = packageStore.get().items;
+  const history = [];
+  const recent = [];
+  for (const p of all) {
+    for (const [pid, at] of Object.entries(p.publishedAt || {})) history.push({ platformId: pid, at });
+    if (p.id !== pkg.id) for (const pid of Object.keys(p.publishedUrls || {})) recent.push({ pkgId: p.id, platformId: pid, fields: p.platforms?.[pid]?.fields || {}, at: p.publishedAt?.[pid] || p.createdAt });
+  }
+  recent.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const approved = Object.keys(pkg.platforms || {}).filter((id) => pkg.approvals?.[id]?.approved && !pkg.publishedUrls?.[id]);
+  const plan = pacing.schedule(approved, { seed: pkg.id, history, tz: profile?.publishing?.timezone || 'America/Chicago' });
+  const allowed = pacing.allowedPlatforms(profile);
+  res.json({
+    assets: plan.map((x) => ({ ...x, automationAllowed: allowed.includes(x.platformId), variance: pacing.varianceIssue(x.platformId, pkg.platforms[x.platformId]?.fields, recent) })),
+    allowed, instruction: pacing.instructionFor(allowed),
+  });
+});
+app.put('/api/publishing/automation', (req, res) => {
+  const { platformId, allowed, volumeJustified, note } = req.body || {};
+  if (!platformId) return res.status(400).json({ error: 'platformId required' });
+  const wsId = listWorkspaces().activeId;
+  if (allowed) {
+    const others = listWorkspaces().items.map((w) => ({ id: w.id, name: w.name, profile: readWorkspace(w.id)?.state?.profile }));
+    const verdict = pacing.canGrant(wsId, others, { volumeJustified: volumeJustified === true });
+    if (!verdict.ok) return res.status(409).json({ error: verdict.reason });
+  }
+  stateStore.update((s) => {
+    const pub = { ...(s.profile.publishing || {}) };
+    const auto = { ...(pub.automation || {}) };
+    if (allowed) auto[platformId] = { allowed: true, grantedAt: new Date().toISOString(), note: String(note || '').slice(0, 200) };
+    else delete auto[platformId];
+    return { ...s, profile: { ...s.profile, publishing: { ...pub, automation: auto } } };
+  });
+  res.json({ allowed: pacing.allowedPlatforms(stateStore.get().profile) });
 });
 
 // Published-URL registry: where each asset actually went live. Feeds
@@ -958,8 +1190,9 @@ app.post('/api/packages/:id/published', async (req, res) => {
     items: s.items.map((p) => {
       if (p.id !== req.params.id) return p;
       p.publishedUrls = { ...(p.publishedUrls || {}) };
-      if (u) p.publishedUrls[platformId] = u;
-      else delete p.publishedUrls[platformId];
+      p.publishedAt = { ...(p.publishedAt || {}) };
+      if (u) { p.publishedUrls[platformId] = u; p.publishedAt[platformId] = p.publishedAt[platformId] || new Date().toISOString(); }
+      else { delete p.publishedUrls[platformId]; delete p.publishedAt[platformId]; }
       p.jsonld = buildJsonLd(p, profile);
       p.visibility = scorePackage(p, profile);
       return (pkg = p);
@@ -1320,12 +1553,24 @@ app.post('/api/packages/:id/platforms', wrap(async (req, res) => {
         if (p.ctaUrl) {
           p.links = { ...(p.links || {}) };
           for (const id of Object.keys(added)) {
-            if (!p.links[id]) p.links[id] = trackedLinkFor(p.ctaUrl, id, p.topic);
+            if (!p.links[id]) p.links[id] = trackedLink(p.ctaUrl, id, p.topic, p.id);
           }
         }
         p.jsonld = buildJsonLd(p, state.profile);
         p.visibility = scorePackage(p, state.profile);
         job.package = p;
+        return p;
+      }),
+    }));
+    // New video assets need their thumbnail briefs (Module 6).
+    const merged = packageStore.get().items.find((x) => x.id === pkg.id);
+    if (merged && Object.keys(added).some(thumbsLib.isVideoPlatform)) {
+      await attachThumbnails(merged, state.profile, media);
+      packageStore.update((s) => ({ items: s.items.map((x) => (x.id === merged.id ? { ...x, thumbnails: merged.thumbnails } : x)) }));
+      job.package = { ...job.package, thumbnails: merged.thumbnails };
+    }
+    packageStore.update((s) => ({
+      items: s.items.map((p) => {
         return p;
       }),
     }));
@@ -1875,6 +2120,27 @@ if (swept.freedBytes > 0) {
 scheduleBackups();
 schedulePlan();
 measureLib.scheduleMeasure();
+feedbackLib.scheduleFeedback();
+
+// Review requests (hourly, off per workspace until switched on) and the
+// monthly entity-consistency check (off until switched on).
+async function sweepReviewsAndEntity() {
+  for (const w of listWorkspaces().items) {
+    await runWithWorkspace(w.id, async () => {
+      const biz = stateStore.get().profile?.business || {};
+      const base = process.env.PUBLIC_BASE_URL || leadStore.get().settings?.publicBase;
+      if (base) { try { await reviewsLib.runReviewRequests({ brand: biz.name || '', person: biz.person?.name || '', base }); } catch (err) { console.warn(`reviews ${w.id}: ${err.message}`); } }
+      const ent = entityLib.entityState();
+      if (ent.auto && (!ent.last || Date.now() - Date.parse(ent.last.at) > 30 * 86400000)) {
+        try { await entityLib.runEntityCheck(stateStore.get().profile); } catch (err) { console.warn(`entity ${w.id}: ${err.message}`); }
+      }
+    });
+  }
+}
+if (!process.env.DISABLE_REVIEWS) {
+  setTimeout(() => sweepReviewsAndEntity().catch(() => {}), Number(process.env.REVIEWS_FIRST_RUN_MS || 12 * 60 * 1000)).unref?.();
+  setInterval(() => sweepReviewsAndEntity().catch(() => {}), 3600 * 1000).unref?.();
+}
 trendLib.scheduleTrends();
 
 // The photo catalog and albums write on a multi-second debounce (they can be

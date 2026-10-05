@@ -7,8 +7,10 @@ export function renderCreate(root, params = null) {
   const openPackageId = params?.get?.('pkg') || sessionStorage.getItem('cs-last-pkg') || null;
   const container = el('div', { class: 'view' });
   const profile = appState.profile;
-  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', reelStyle: 'voice', tripId: 'auto', quickFormats: new Set(['instagram_reel']) };
-  const QUICK = ['instagram_reel', 'instagram_post', 'facebook_reel', 'facebook'];
+  const form = { topic: '', angle: '', ctaUrl: '', pillarId: profile.pillars?.[0]?.id || null, seriesId: null, platforms: new Set(appState.platforms.filter((p) => !p.quickOnly).map((p) => p.id)), mediaIds: new Set(), autoMedia: true, mode: 'quick', reelStyle: 'voice', tripId: 'auto', quickFormats: new Set(['instagram_reel']), hookId: '' };
+  let hookList = [];
+  api.hooks().then((h) => { hookList = h.hooks.filter((x) => !x.retiredAt); drawForm(); }).catch(() => {});
+  const QUICK = ['instagram_reel', 'instagram_post', 'facebook_reel', 'facebook', 'linkedin'];
   let media = [];
   let mediaTotal = 0;
   let mediaQuery = '';
@@ -33,6 +35,11 @@ export function renderCreate(root, params = null) {
         placeholder: 'e.g. Contrarian: the cheapest cabin is the wrong buy',
         value: form.angle, oninput: (e) => { form.angle = e.target.value; },
       })),
+      field('Hook template (optional)', el('select', { class: 'input select', onchange: (e) => { form.hookId = e.target.value; } },
+        el('option', { value: '' }, 'Best from my hook library (recommended)'),
+        hookList.map((h) => { const o = el('option', { value: h.id }, `${h.source === 'promoted' ? '★ ' : ''}${h.template}`); if (h.id === form.hookId) o.selected = true; return o; })),
+        'Every hook comes from the library and is filled only with checked facts. Promoted winners are starred.'),
+      quick ? el('button', { class: 'btn btn-ghost btn-xs', style: 'margin-bottom:10px', onclick: () => { form.quickFormats = new Set(['instagram_post', 'linkedin', 'facebook']); drawForm(); } }, 'One idea, three platforms (Instagram, LinkedIn, Facebook)') : null,
       field('CTA link (optional)', textInput({
         placeholder: 'https://your-apply-or-booking-page.com',
         value: form.ctaUrl, oninput: (e) => { form.ctaUrl = e.target.value; },
@@ -123,6 +130,7 @@ export function renderCreate(root, params = null) {
     progress.replaceChildren(spinner('Queueing generation…'));
     try {
       const { jobId } = await api.generate({
+        hookId: form.hookId || null,
         topic: form.topic.trim(), angle: form.angle.trim() || null,
         ctaUrl: form.ctaUrl.trim() || null,
         pillarId: form.pillarId, seriesId: form.seriesId,
@@ -241,8 +249,11 @@ function renderPackage(pkg, onDelete) {
           copyBtn(pkg.links[active])),
         el('pre', { class: 'asset-value code' }, pkg.links[active])));
     }
+    body.append(qualityRow(pkg, active, () => { drawTabs(); drawBody(); }));
     body.append(approvalRow(pkg, active, () => { drawTabs(); drawBody(); }));
+    if (pkg.thumbnails?.[active] || spec?.group === 'video') body.append(thumbnailRow(pkg, active, () => { drawTabs(); drawBody(); }));
     body.append(publishedUrlRow(pkg, active, () => { drawTabs(); drawBody(); }));
+    if (pkg.publishedUrls?.[active] || pkg.performance?.[active]) body.append(performanceRow(pkg, active, () => { drawTabs(); drawBody(); }));
     for (const f of spec?.fields || Object.keys(asset.fields).map((k) => ({ key: k, label: k }))) {
       const value = fieldText(asset.fields[f.key]);
       if (!value) continue;
@@ -319,7 +330,86 @@ function renderPackage(pkg, onDelete) {
         el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`package-${pkg.id}.json`, JSON.stringify(pkg, null, 2), 'application/json') }, '⬇ JSON'),
         el('button', { class: 'btn btn-danger btn-xs', onclick: onDelete }, 'Delete'))),
     pkg.quotable ? el('blockquote', { class: 'sample' }, `“${pkg.quotable}”`) : null,
+    hookLine(pkg),
     tabRow, body);
+}
+
+// ---- quality gate, hook, thumbnail brief and performance panels ----------
+
+function hookLine(pkg) {
+  if (pkg.hook) {
+    return el('p', { class: 'muted', style: 'margin:4px 0 10px' },
+      el('strong', {}, 'Hook: '), pkg.hook.text,
+      el('span', { style: 'opacity:.7' }, ` · library template ${pkg.hook.templateId} (${String(pkg.hook.pattern || '').replace(/_/g, ' ')})`));
+  }
+  if (pkg.hookError) {
+    return el('p', { class: 'warn', style: 'margin:4px 0 10px' }, `No hook passed the voice and fact checks: ${pkg.hookError}. Add the missing fact in Quality, Knowledge base, then regenerate or edit the hook field with a library hook.`);
+  }
+  return null;
+}
+
+function qualityRow(pkg, platformId, onPackageUpdated) {
+  const gate = pkg.platforms[platformId]?.gate;
+  const recheck = el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => {
+    try { const r = await api.regate(pkg.id); Object.assign(pkg, r.package); toast('Re-checked against the voice card and knowledge base'); onPackageUpdated?.(); } catch (err) { toast(err.message, 'err'); }
+  } }, gate ? 'Re-check' : 'Run the quality check');
+  if (!gate) {
+    return el('div', { class: 'asset-field' }, el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Quality gate: not checked yet (made before the gate existed)'), recheck));
+  }
+  const issues = [
+    ...(gate.voice || []).map((v) => `Voice: ${v.message}${v.span ? ` ("${v.span}")` : ''}${v.field ? ` in ${v.field}` : ''}`),
+    ...(gate.format || []).map((v) => `Format: ${v.message}`),
+    ...(gate.blocked || []).map((b) => `Unverified claim in ${b.field}: "${b.claim}"`),
+  ];
+  const decisions = (gate.decisions || []).filter((d) => d.status !== 'unverified');
+  const trend = pkg.platforms[platformId]?.trendIds?.length ? el('p', { class: 'muted', style: 'margin:6px 0 0' }, `Shaped by trend entries: ${pkg.platforms[platformId].trendIds.join(', ')}`) : null;
+  const spec = pkg.platforms[platformId]?.assetSpec;
+  return el('div', { class: 'asset-field', style: gate.status === 'blocked' ? 'border-left:3px solid #b4533a;padding-left:10px' : '' },
+    el('div', { class: 'row spread' },
+      el('span', { class: 'field-label' }, gate.status === 'passed' ? `✅ Quality gate passed${gate.retried ? ' (after one rewrite)' : ''}` : `⛔ Blocked by the quality gate${gate.retried ? ' after one rewrite' : ''}`),
+      recheck),
+    issues.length ? el('ul', { style: 'margin:6px 0 0;padding-left:18px' }, issues.slice(0, 12).map((t) => el('li', {}, t))) : null,
+    decisions.length ? el('details', { style: 'margin-top:6px' }, el('summary', { class: 'muted' }, `${decisions.length} checked claim(s) and their sources`),
+      el('ul', { style: 'padding-left:18px' }, decisions.slice(0, 30).map((d) => el('li', { class: 'muted' }, `${d.claim} · ${d.status === 'verified' ? 'verified' : 'owner statement'} · ${d.source || 'no source'}`)))) : null,
+    (gate.style || []).length ? el('p', { class: 'muted', style: 'margin:6px 0 0' }, `Style notes (advisory): ${(gate.style || []).map((v) => v.message).join('; ')}`) : null,
+    spec ? el('p', { class: 'muted', style: 'margin:6px 0 0' }, `Asset spec: ${spec.aspect}, at least ${spec.min_resolution}`) : null,
+    trend);
+}
+
+function thumbnailRow(pkg, platformId, onPackageUpdated) {
+  const t = pkg.thumbnails?.[platformId];
+  const build = el('button', { class: 'btn btn-ghost btn-xs', onclick: async (e) => {
+    e.target.disabled = true;
+    try { const r = await api.buildThumbnails(pkg.id); Object.assign(pkg, r.package); toast('Thumbnail briefs rebuilt'); onPackageUpdated?.(); } catch (err) { toast(err.message, 'err'); e.target.disabled = false; }
+  } }, t ? 'Rebuild' : 'Build thumbnail brief');
+  if (!t) return el('div', { class: 'asset-field' }, el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, 'Thumbnail brief: missing (this batch cannot pass until it has one)'), build));
+  const overlay = textInput({ value: t.overlay_text || '', style: 'flex:1;min-width:200px' });
+  const dir = el('textarea', { class: 'input textarea', rows: 3, style: 'width:100%' }, t.visual_direction || '');
+  const save = el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => {
+    try { const r = await api.editThumbnail(pkg.id, platformId, { overlay_text: overlay.value, visual_direction: dir.value }); Object.assign(pkg, r.package); toast('Brief saved and re-checked'); onPackageUpdated?.(); } catch (err) { toast(err.message, 'err'); }
+  } }, 'Save');
+  const z = t.safe_zone_layout?.textBand;
+  return el('div', { class: 'asset-field' },
+    el('div', { class: 'row spread' }, el('span', { class: 'field-label' }, `${t.status === 'passed' ? '✅' : '⛔'} Thumbnail brief · ${t.format}, at least ${t.min_resolution}`), build),
+    (t.problems || []).length ? el('ul', { style: 'margin:6px 0;padding-left:18px' }, t.problems.map((p) => el('li', {}, p))) : null,
+    el('div', { class: 'muted', style: 'margin:6px 0 2px' }, 'Overlay text (6 words max, never the caption\'s first line)'),
+    el('div', { class: 'row gap' }, overlay, save),
+    el('div', { class: 'muted', style: 'margin:8px 0 2px' }, 'Visual direction'), dir,
+    z ? el('p', { class: 'muted', style: 'margin:6px 0 0' }, `Safe zone: text between ${z.fromTopPct}% and ${z.toTopPct}% from the top, ${z.marginSidePct}% side margins. Top 14% and bottom 35% stay clear. No letterboxing.`) : null);
+}
+
+const METRIC_LABELS = [['bookedCalls', 'Booked calls'], ['dms', 'DMs'], ['saves', 'Saves'], ['shares', 'Shares'], ['follows', 'Follows']];
+function performanceRow(pkg, platformId, onPackageUpdated) {
+  const cur = pkg.performance?.[platformId] || {};
+  const inputs = Object.fromEntries(METRIC_LABELS.map(([k]) => [k, el('input', { class: 'input', type: 'number', min: 0, value: cur[k] ?? '', style: 'width:90px' })]));
+  const save = el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => {
+    const m = Object.fromEntries(Object.entries(inputs).filter(([, i]) => i.value !== '').map(([k, i]) => [k, Number(i.value)]));
+    try { const r = await api.setPerformance(pkg.id, platformId, m); Object.assign(pkg, r.package); toast('Results saved'); onPackageUpdated?.(); } catch (err) { toast(err.message, 'err'); }
+  } }, 'Save results');
+  return el('div', { class: 'asset-field' },
+    el('span', { class: 'field-label' }, `Results${cur.updatedAt ? ` · updated ${new Date(cur.updatedAt).toLocaleDateString()}` : ''}`),
+    el('p', { class: 'muted', style: 'margin:4px 0' }, 'From the platform\'s insights. Ranked in this order; likes are not a metric. Booked calls also fill in automatically from leads that came through this post\'s tracked link.'),
+    el('div', { class: 'row gap wrap' }, METRIC_LABELS.map(([k, label]) => el('label', { class: 'col', style: 'gap:2px' }, el('span', { class: 'muted', style: 'font-size:12px' }, label), inputs[k])), save));
 }
 
 // Draft/Approved gate per platform: the Publish Run page only exposes
@@ -334,7 +424,25 @@ function approvalRow(pkg, platformId, onPackageUpdated) {
         Object.assign(pkg, updated);
         toast(!approved ? 'Approved · it now appears on the Publish Run page' : 'Back to draft');
         onPackageUpdated?.();
-      } catch (err) { toast(err.message, 'err'); }
+      } catch (err) {
+        if (err.status === 409 && !approved) {
+          // Fail closed: the gate blocked it. The owner may still override,
+          // and the override is recorded on the approval.
+          if (confirm('The quality gate blocked this asset (see the issues above). Approve it anyway? The override is logged.')) {
+            try {
+              const { package: updated } = await api.approvePlatform(pkg.id, platformId, true, true);
+              Object.assign(pkg, updated);
+              toast('Approved with override (logged)');
+            } catch (e2) { toast(e2.message, 'err'); }
+          } else {
+            const fresh = await api.regate(pkg.id).catch(() => null);
+            if (fresh?.package) Object.assign(pkg, fresh.package);
+          }
+          onPackageUpdated?.();
+          return;
+        }
+        toast(err.message, 'err');
+      }
     },
   }, approved ? 'Move back to draft' : '✓ Approve for publishing');
   return el('div', { class: 'asset-field' },

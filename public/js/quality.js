@@ -4,11 +4,11 @@
 // Everything here belongs to the active business only.
 
 import { api, appState } from './api.js';
-import { el, toast, spinner, textInput, download } from './ui.js';
+import { el, toast, spinner, textInput, download, copyBtn } from './ui.js';
 
 const TABS = [
   ['knowledge', 'Knowledge base'], ['voice', 'Voice card'], ['hooks', 'Hook library'], ['trends', 'Trends'],
-  ['results', 'Results'], ['reviews', 'Reviews'], ['entity', 'Entity check'],
+  ['magnets', 'Lead magnets'], ['results', 'Results'], ['reviews', 'Reviews'], ['entity', 'Entity check'],
 ];
 const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'never');
 const td = (...c) => el('td', { style: 'padding:6px 8px;vertical-align:top' }, ...c);
@@ -189,6 +189,7 @@ async function resultsPanel(refresh) {
       el('h2', {}, 'Post to lead to booked call to signed'),
       el('p', { class: 'muted' }, 'Leads are matched to the post whose tracked link they came through. Mark a lead "call_booked" or "won" on the Leads page to move it along.'),
       attr.rows.length ? table(['Content', 'Platform', 'Booking clicks', 'Leads', 'Booked', 'Signed'], attr.rows.map((r) => tr(td(r.topic), td(r.platformId), td(String(r.bookingClicks)), td(String(r.leads)), td(String(r.booked)), td(String(r.signed))))) : el('p', { class: 'muted' }, 'No attributed leads yet.')),
+    await metaBlock(refresh),
     el('div', { class: 'card' },
       el('h2', {}, 'Book-a-brief-call link'),
       el('p', { class: 'muted' }, 'Your calendar booking page. The studio gives every post and email a tracked link that counts the click and forwards to it, so booked calls trace back to the post.'),
@@ -243,4 +244,70 @@ async function entityPanel(refresh) {
         td(x.skipped || x.error || (x.issues.length ? `⛔ ${x.issues.join('; ')}` : '✅ consistent'))))) : el('p', { class: 'muted' }, `${e.targets.length} page(s) will be checked: your profile links plus the list above.`)));
 }
 
-const PANELS = { knowledge: knowledgePanel, voice: voicePanel, hooks: hooksPanel, trends: trendsPanel, results: resultsPanel, reviews: reviewsPanel, entity: entityPanel };
+// ---- Meta connection (results by API) -----------------------------------------
+async function metaBlock(refresh) {
+  const st = await api.meta();
+  const token = el('input', { class: 'input', type: 'password', placeholder: st.connected ? 'Token saved (paste a new one to replace it)' : 'Access token with instagram_manage_insights and pages_read_engagement', style: 'width:100%' });
+  const ig = textInput({ value: st.igUserId, placeholder: 'Instagram professional account id (digits)' });
+  const page = textInput({ value: st.pageId, placeholder: 'Facebook Page id (digits, optional)' });
+  return el('div', { class: 'card' },
+    el('h2', {}, `Meta results by API${st.connected ? ' · connected' : ''}`),
+    el('p', { class: 'muted' }, 'Pulls saves, shares and follows for your published Instagram and Facebook posts once a day, read-only. DMs are not available from Meta, and booked calls come from your leads, so those stay as you enter them. The token is stored for this business only and is never shown again or included in backups.'),
+    el('div', { class: 'col gap' }, token, el('div', { class: 'row gap wrap' }, ig, page),
+      el('div', { class: 'row gap wrap' },
+        el('button', { class: 'btn', onclick: async () => { try { await api.metaConnect({ accessToken: token.value || undefined, igUserId: ig.value, pageId: page.value }); toast('Saved'); refresh(); } catch (e) { err(e); } } }, 'Save connection'),
+        st.connected ? el('button', { class: 'btn btn-ghost', onclick: async (e) => { e.target.disabled = true; try { const r = await api.metaSync(); toast(`${r.synced} post(s) updated`); refresh(); } catch (er) { err(er); e.target.disabled = false; } } }, 'Pull results now') : null,
+        st.connected ? el('button', { class: 'btn btn-ghost', onclick: async () => { if (confirm('Disconnect Meta for this business?')) { await api.metaDisconnect().catch(err); refresh(); } } }, 'Disconnect') : null)),
+    el('p', { class: 'muted' }, `Last pull: ${fmt(st.lastSync)}${st.lastError ? ` · last error: ${st.lastError}` : ''}`));
+}
+
+// ---- interactive lead magnets --------------------------------------------------------
+async function magnetsPanel(refresh) {
+  const { magnets } = await api.magnets();
+  const kind = el('select', { class: 'input select' }, el('option', { value: 'quiz' }, 'Quiz'), el('option', { value: 'calculator' }, 'Calculator'));
+  const topic = textInput({ placeholder: 'e.g. Which kind of group trip fits your team?', style: 'width:100%' });
+  const audience = textInput({ placeholder: 'Who it is for (optional)', style: 'width:100%' });
+  const card = (m) => {
+    const json = el('textarea', { class: 'input textarea', rows: 14, style: 'width:100%;font-family:monospace;font-size:12px' }, JSON.stringify((({ kind: k, title, intro, questions, inputs, constants, outputs, results, consentText }) => ({ kind: k, title, intro, questions, inputs, constants, outputs, results, consentText }))(m), null, 2));
+    const embedBox = el('div', {});
+    const tryBox = el('div', {});
+    return el('div', { class: 'card' },
+      el('div', { class: 'row spread' },
+        el('h3', { style: 'margin:0' }, `${m.title} · ${m.kind}`),
+        el('span', {}, m.status === 'approved' ? `✅ approved${m.override ? ' (override)' : ''}` : m.gate.status === 'passed' ? 'draft · passes the gate' : '⛔ draft · blocked by the gate')),
+      m.gate.problems.length ? el('ul', {}, m.gate.problems.slice(0, 15).map((p) => el('li', { class: 'muted' }, p))) : null,
+      el('p', { class: 'muted' }, m.intro),
+      el('details', {}, el('summary', { class: 'muted' }, 'Edit (JSON)'), json,
+        el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => { try { await api.saveMagnet(m.slug, JSON.parse(json.value)); toast('Saved and re-checked (back to draft)'); refresh(); } catch (e) { err(e); } } }, 'Save edits')),
+      el('div', { class: 'row gap wrap', style: 'margin-top:8px' },
+        el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => {
+          const body = m.kind === 'quiz' ? { answers: Object.fromEntries(m.questions.map((q) => [q.id, q.options[0]?.id])) } : { inputs: Object.fromEntries(m.inputs.map((x) => [x.id, x.default])) };
+          try { const r = await api.tryMagnet(m.slug, body); const res = m.results.find((x) => x.key === r.resultKey); tryBox.replaceChildren(el('p', { class: 'muted' }, `Sample run: ${res?.title || r.resultKey}${r.outputs ? ` · ${r.outputs.map((o) => `${o.label}: ${o.value}`).join(', ')}` : ''}`)); } catch (e) { err(e); }
+        } }, 'Try a sample run'),
+        m.status === 'approved'
+          ? el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => { await api.approveMagnet(m.slug, false).catch(err); refresh(); } }, 'Back to draft')
+          : el('button', { class: 'btn btn-primary btn-xs', onclick: async () => {
+            try { await api.approveMagnet(m.slug, true); toast('Approved'); refresh(); } catch (e) {
+              if (e.status === 409 && confirm('The quality gate blocked this magnet. Approve anyway? The override is logged.')) { await api.approveMagnet(m.slug, true, true).catch(err); refresh(); } else err(e);
+            }
+          } }, 'Approve'),
+        m.status === 'approved' ? el('button', { class: 'btn btn-ghost btn-xs', onclick: async () => {
+          try { const r = await api.magnetEmbed(m.slug); embedBox.replaceChildren(el('p', { class: 'muted' }, r.note), el('div', { class: 'row gap' }, copyBtn(r.html, 'Copy embed code'), el('button', { class: 'btn btn-ghost btn-xs', onclick: () => download(`${m.slug}.html`, r.html, 'text/html') }, 'Download'))); } catch (e) { err(e); }
+        } }, 'Get embed code') : null,
+        el('button', { class: 'btn btn-danger btn-xs', onclick: async () => { if (confirm('Delete this lead magnet?')) { await api.deleteMagnet(m.slug).catch(err); refresh(); } } }, 'Delete')),
+      tryBox, embedBox);
+  };
+  return el('div', {},
+    el('div', { class: 'card' },
+      el('h2', {}, 'Interactive lead magnets'),
+      el('p', { class: 'muted' }, 'A quiz or a calculator for your own site. Visitors see a result on the page and can have the full result emailed, which arrives here as a lead. Every number and claim must come from your knowledge base, and a calculator\'s rates must each be a checked fact. Nothing goes live until you approve it.'),
+      el('div', { class: 'col gap' }, el('div', { class: 'row gap' }, kind), topic, audience,
+        el('button', { class: 'btn', onclick: async (e) => {
+          if (!topic.value.trim()) return toast('Add a topic first', 'err');
+          e.target.disabled = true; e.target.textContent = 'Drafting…';
+          try { await api.draftMagnet({ kind: kind.value, topic: topic.value, audience: audience.value }); toast('Draft ready'); refresh(); } catch (er) { err(er); e.target.disabled = false; e.target.textContent = 'Draft it'; }
+        } }, 'Draft it'))),
+    ...magnets.map(card));
+}
+
+const PANELS = { magnets: magnetsPanel, knowledge: knowledgePanel, voice: voicePanel, hooks: hooksPanel, trends: trendsPanel, results: resultsPanel, reviews: reviewsPanel, entity: entityPanel };

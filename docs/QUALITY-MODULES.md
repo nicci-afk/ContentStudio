@@ -101,9 +101,32 @@ Server-owned profile fields (`knowledgeBase`, `voiceCard`,
 `publishing.automation`, `business.bookingUrl`) survive a stale tab's
 whole-state save.
 
+- **Interactive lead magnets (`lib/magnets.js`):** quiz or calculator per brand
+  (`studio.magnets`). Claude drafts from the knowledge base (one retry with
+  problems cited); every string passes the voice card and fact gate; a
+  calculator's rates are named constants whose numbers must sit in a usable
+  knowledge-base claim, and formulas use a safe expression language (no eval;
+  bare numbers limited to unit conversions). Edits send it back to draft;
+  approval is refused while blocked unless overridden. The embed is a
+  self-contained block for her own site; the visitor sees the result, and can
+  have it emailed with consent through `/api/leads/capture` (`magnet` field;
+  origin allowlist, honeypot, rate limits). Only known option ids and clamped
+  numbers are stored on the lead. Results can link a manifest PDF. Quarterly
+  review compares downloads with interactive magnets. API: `GET /api/magnets`,
+  `POST /api/magnets/draft`, `PUT /api/magnets/:slug`, `POST /api/magnets/:slug/approve`,
+  `POST /api/magnets/:slug/try`, `GET /api/magnets/:slug/embed`, `DELETE /api/magnets/:slug`.
+- **Meta metrics by API (`lib/meta.js`):** per-workspace token plus Instagram
+  professional account id and/or Page id in `meta-auth.json` (not in backups,
+  never returned). Daily pull of saves, shares, follows for Instagram posts and
+  shares for Page posts published in the last 90 days, stored as
+  `performance[p].api`; the feedback loop takes the larger of manual and API
+  numbers. DMs are not offered by the API. Env `META_GRAPH_URL` (tests),
+  `DISABLE_META_SYNC`, `META_FIRST_RUN_MS`. API: `GET /api/meta`,
+  `PUT /api/meta/connect`, `DELETE /api/meta`, `POST /api/meta/sync`.
+
 ## Not built
-Interactive lead magnets (quiz, calculator); Meta metric ingestion by API
-(numbers are entered by hand); the Jev classifier (stub only).
+The Jev classifier stays a stub (`externalClassifier` in lib/facts.js) by the
+spec's own rule: build it once funnel volume justifies it.
 
 ## Tests
-`node tests/voice-facts.test.js` and `node tests/modules.test.js`.
+`node tests/voice-facts.test.js`, `node tests/modules.test.js`, `node tests/magnets-meta.test.js`.

@@ -1,0 +1,16 @@
+{
+  "_help": "Names that speech-to-text gets wrong. Each rule fixes every listed spelling (case does not matter) to 'correct'. To add a new misspelling, add it to 'variants' exactly as it appeared in a transcript; no code change is needed (it takes effect on the next deploy or restart). 'patterns' are regular expressions for close variants. 'keyterm' true also sends the correct spelling to the transcription engine as a hint.",
+  "rules": [
+    {
+      "correct": "Nicci Grotefendt",
+      "keyterm": true,
+      "variants": [
+        "Nikki Grotefend", "Nikki Grotefendt", "Nicky Grotefend", "Nicky Grotefendt",
+        "Nicki Grotefend", "Nicki Grotefendt", "Nicci Grotefend", "Nici Grotefendt"
+      ],
+      "patterns": [
+        "\\bn[iy](?:c{1,2}|k{1,2}|ck)(?:i|y|ie|ey)\\s+gr[oa]+t+e*[fh]+e+n+d*t*\\b"
+      ]
+    }
+  ]
+}

@@ -95,6 +95,7 @@ const PLACEMENT = {
   pinned_comment: 'Post this as the FIRST COMMENT after publishing, then pin it. Never in the description.',
   recording_location: 'Goes in Show more, Video location (search and pick the closest match).',
   thumbnail_text: 'Already on the cover image. Not pasted anywhere.',
+  playlist: 'Details, Playlists: pick this existing playlist. Never create a new one.',
   transcript: 'Source of the captions file (upload the .srt under Subtitles). Not pasted into the description.',
 };
 

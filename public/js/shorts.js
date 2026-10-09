@@ -292,6 +292,53 @@ async function drawDetail(container, pkgId, live) {
     return box;
   };
 
+  // -- playlist: set on this package, or the brand's default. Either one names
+  // a playlist that already exists, so the posting prompt picks it and never
+  // makes a duplicate. Mirrors playlistFor in lib/shorts.js.
+  const playlistBox = (() => {
+    const own = fieldText(fields.playlist).trim();
+    const brand = String(appState.profile?.publishing?.youtube?.playlist || '').trim();
+    const suggested = String(s.copy?.playlist || '').trim();
+    const value = own || brand || suggested || `${appState.profile?.business?.name || 'Brand'} Shorts`;
+    const note = own ? 'Set on this Short. The posting prompt picks this existing playlist and never creates a new one.'
+      : brand ? 'This brand\'s default playlist. The posting prompt picks it and never creates a new one. Edit to use a different one for this Short only.'
+      : 'Suggested name. Until you set one (here or as the brand default), the posting prompt creates this playlist if it does not exist.';
+    const shown = el('pre', { class: 'asset-value' }, value);
+    const saveBrand = async (name) => {
+      const publishing = { ...(appState.profile?.publishing || {}), youtube: { ...(appState.profile?.publishing?.youtube || {}), playlist: name } };
+      await api.patchState('profile.publishing', publishing);
+      if (appState.profile) appState.profile.publishing = publishing;
+    };
+    return el('div', { class: 'asset-field' },
+      el('div', { class: 'row spread' },
+        el('span', { class: 'field-label' }, 'Playlist'),
+        el('div', { class: 'row gap' },
+          el('button', {
+            class: 'btn btn-ghost btn-xs', onclick: () => {
+              const input = textInput({ value });
+              input.value = value;
+              const brandToo = el('input', { type: 'checkbox' });
+              shown.replaceWith(el('div', {}, input,
+                el('label', { class: 'muted', style: 'display:flex;gap:6px;align-items:center;margin-top:6px' }, brandToo, 'Also make this the default for every Short in this brand'),
+                el('div', { class: 'row gap', style: 'margin-top:8px' },
+                  el('button', {
+                    class: 'btn btn-primary btn-xs', onclick: async () => {
+                      const name = input.value.trim();
+                      try {
+                        await api.editPackageField(pkgId, 'youtube_shorts', 'playlist', name);
+                        if (brandToo.checked && name) await saveBrand(name);
+                        toast('Playlist saved'); redraw();
+                      } catch (err) { toast(err.message, 'err'); }
+                    },
+                  }, 'Save'),
+                  el('button', { class: 'btn btn-ghost btn-xs', onclick: redraw }, 'Cancel'))));
+            },
+          }, '✎ Edit'),
+          copyBtn(() => value))),
+      el('p', { class: 'muted', style: 'margin:2px 0 6px' }, note),
+      shown);
+  })();
+
   const titleOptions = (s.copy?.titleOptions || []).filter((t) => t && t !== fields.title);
   const titleBlock = el('div', {},
     fieldBox('title', 'Title', 'Keyword first, 60 characters or fewer so none of it is cut off.'),
@@ -483,6 +530,7 @@ async function drawDetail(container, pkgId, live) {
       fieldBox('tags', 'Tags', 'Pasted into Show more, Tags.'),
       fieldBox('pinned_comment', 'Pinned comment', 'Posted and pinned right after publishing.'),
       fieldBox('recording_location', 'Video location', 'Show more, Video location. A real place only.'),
+      playlistBox,
       coverBox,
       fieldBox('transcript', 'Transcript', 'The words spoken. It feeds the captions file and the VideoObject schema.', true),
       s.copy?.visualSummary ? el('p', { class: 'muted' }, `What the video shows: ${s.copy.visualSummary}`) : null,

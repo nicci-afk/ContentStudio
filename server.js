@@ -50,6 +50,7 @@ const { catalog, albumStore, currentLibrary } = await import('./lib/store.js');
 const { withAlbumContext } = await import('./lib/albums.js');
 const { mediaStatusFor } = await import('./lib/moderation.js');
 const shortsLib = await import('./lib/shorts.js');
+const { fixNames, fixSrt } = await import('./lib/namefix.js');
 const gLib = await import('./lib/google.js');
 const measureLib = await import('./lib/measure.js');
 const editLib = await import('./lib/edit.js');
@@ -955,7 +956,7 @@ app.patch('/api/packages/:id', (req, res) => {
     items: s.items.map((p) => {
       if (p.id !== req.params.id) return p;
       if (!p.platforms?.[platformId]?.fields || typeof field !== 'string') return p;
-      p.platforms[platformId].fields[field] = value;
+      p.platforms[platformId].fields[field] = field === 'transcript' && typeof value === 'string' ? fixNames(value) : value;
       if (p.platforms[platformId].gate) p.platforms[platformId].gate = checkAsset(platformId, p.platforms[platformId].fields, profile, hookContext(p));
       if (p.thumbnails?.[platformId]) { const t = p.thumbnails[platformId]; const probs = thumbsLib.checkBrief(t, { fields: p.platforms[platformId].fields, profile }); p.thumbnails[platformId] = { ...t, problems: probs, status: probs.length ? 'blocked' : 'passed' }; }
       p.contentModifiedAt = new Date().toISOString();
@@ -1588,10 +1589,13 @@ app.get('/api/render/:id/poster', wrap(async (req, res) => {
   res.sendFile(file, RENDER_CACHE);
 }));
 
+// Captions pass through the name corrections on the way out, so a file
+// written before a correction existed still downloads right; no long cache,
+// because the corrected text can differ from what a browser already holds.
 app.get('/api/render/:id/srt', (req, res) => {
   const file = renderFile(req.params.id, 'srt');
   if (!file) return res.status(404).end();
-  res.type('text/plain').sendFile(file, RENDER_CACHE);
+  res.set('Cache-Control', 'no-cache').type('text/plain').send(fixSrt(fs.readFileSync(file, 'utf8')));
 });
 
 app.get('/api/packages/:id/renders', (req, res) => {
@@ -1935,7 +1939,7 @@ app.get('/api/shorts/:id/captions/:lang', (req, res) => {
   const file = shortsLib.captionFile(pkg, req.params.lang);
   if (!file) return res.status(404).end();
   res.set('Content-Disposition', `attachment; filename="${shortsLib.downloadNames(pkg).translations[req.params.lang]}"`);
-  res.type('text/plain').sendFile(file);
+  res.set('Cache-Control', 'no-cache').type('text/plain').send(fixSrt(fs.readFileSync(file, 'utf8')));
 });
 
 app.post('/api/shorts/:id/replies', wrap(async (req, res) => {
@@ -2211,6 +2215,39 @@ const swept = cleanupStorage(new Set());
 if (swept.freedBytes > 0) {
   console.log(`  storage: swept ${Math.round(swept.freedBytes / 1e6)}MB of stale render temp files (${swept.removedTmp} folder(s), ${swept.removedParts} partial upload(s), ${swept.removedCacheFiles || 0} aged cache file(s))`);
 }
+// Transcripts saved before a name correction existed (or before a new
+// misspelling was added to config/name-corrections.json) are corrected once
+// at boot: the transcript field, the stored cues, and the schema built from
+// them. Only the listed names change; a package with no match is untouched.
+function fixStoredTranscripts() {
+  let fixed = 0;
+  for (const w of listWorkspaces().items) {
+    try {
+      runWithWorkspace(w.id, () => {
+        const profile = stateStore.get().profile;
+        packageStore.update((s) => ({
+          items: s.items.map((p) => {
+            const f = p.platforms?.youtube_shorts?.fields;
+            const td = p.short?.transcriptData;
+            const before = JSON.stringify([f?.transcript, td]);
+            if (f && typeof f.transcript === 'string') f.transcript = fixNames(f.transcript);
+            if (td) {
+              if (typeof td.text === 'string') td.text = fixNames(td.text);
+              for (const c of td.cues || []) c.text = fixNames(c.text);
+            }
+            if (JSON.stringify([f?.transcript, td]) === before) return p;
+            fixed++;
+            p.jsonld = buildJsonLd(p, profile);
+            p.visibility = scorePackage(p, profile);
+            return p;
+          }),
+        }));
+      });
+    } catch (err) { console.error(`  namefix: workspace ${w.id}: ${err.message}`); }
+  }
+  if (fixed) console.log(`  namefix: corrected names in ${fixed} stored transcript(s)`);
+}
+fixStoredTranscripts();
 scheduleBackups();
 schedulePlan();
 measureLib.scheduleMeasure();

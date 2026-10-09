@@ -5,11 +5,20 @@
       "correct": "Nicci Grotefendt",
       "keyterm": true,
       "variants": [
-        "Nikki Grotefend", "Nikki Grotefendt", "Nicky Grotefend", "Nicky Grotefendt",
-        "Nicki Grotefend", "Nicki Grotefendt", "Nicci Grotefend", "Nici Grotefendt"
+        "Nikki Grotefend",
+        "Nikki Grotefendt",
+        "Nicky Grotefend",
+        "Nicky Grotefendt",
+        "Nicki Grotefend",
+        "Nicki Grotefendt",
+        "Nicci Grotefend",
+        "Nici Grotefendt",
+        "Nikki Grotevant",
+        "Nicki Grotevant",
+        "Nicky Grotevant"
       ],
       "patterns": [
-        "\\bn[iy](?:c{1,2}|k{1,2}|ck)(?:i|y|ie|ey)\\s+gr[oa]+t+e*[fh]+e+n+d*t*\\b"
+        "\\bn[iy](?:c{1,2}|k{1,2}|ck)(?:i|y|ie|ey)\\s+gr[oa]+t+[ae]*[fhv]+[ae]+n+[dt]*\\b"
       ]
     }
   ]

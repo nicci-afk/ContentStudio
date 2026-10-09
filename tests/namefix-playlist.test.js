@@ -17,12 +17,12 @@ const N = 'Nicci Grotefendt';
 
 // ---- unit ---------------------------------------------------------------------
 for (const v of ['Nikki Grotefend', 'Nikki Grotefendt', 'Nicky Grotefend', 'Nicky Grotefendt', 'Nicki Grotefend', 'Nicki Grotefendt', 'Nicci Grotefend', 'Nici Grotefendt',
-  'NIKKI GROTEFEND', 'nikki grotefend', 'Nikkie Grottefend', 'Nicky  Grotefendt']) {
+  'NIKKI GROTEFEND', 'nikki grotefend', 'Nikkie Grottefend', 'Nicky  Grotefendt', 'Nikki Grotevant', 'Nicky Grotefent', 'Nikki Grotevand']) {
   assert.equal(fixNames(`Hi, I'm ${v}, welcome.`), `Hi, I'm ${N}, welcome.`, v);
 }
 assert.equal(fixNames("Nikki Grotefend's team"), `${N}'s team`);
 assert.equal(fixNames(`${N} again`), `${N} again`, 'already correct stays');
-for (const other of ['Nikki said hello', 'Grotefend Street', 'Nicky Jones', 'nickel grotto', 'Nikki and the grotto']) {
+for (const other of ['Nikki said hello', 'Grotefend Street', 'Nicky Jones', 'nickel grotto', 'Nikki and the grotto', 'Nikki Grant', 'Nicky Greenfield']) {
   assert.equal(fixNames(other), other, `must not touch: ${other}`);
 }
 assert.deepEqual(nameKeyterms(), [N]);
